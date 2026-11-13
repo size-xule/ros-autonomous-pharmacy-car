@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set +u
+source /opt/ros/lyrical/setup.bash
+export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-1}"
+exec python3 /home/keyuan22/iscc_imu_check.py

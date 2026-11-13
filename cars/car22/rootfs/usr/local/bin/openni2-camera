@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Astra S on car 2 via the OpenNI2 SDK in /opt/oni2-orbbec.
+# The pharmacy mono8 converter subscribes to the visible-light RGB stream;
+# IR is left without subscribers and stays off.
+set -euo pipefail
+
+# ROS's setup.bash reads a few normally-unset variables; relax `set -u` only
+# while sourcing it.
+set +u
+source /opt/ros/lyrical/setup.bash
+set -u
+export OPENNI2_REDIST=/opt/oni2-orbbec
+export LD_LIBRARY_PATH="/opt/oni2-orbbec:${LD_LIBRARY_PATH:-}"
+
+# The LCD/LED recognition board is far brighter than the room, so the default
+# auto-exposure drives the sensor to the top of its range and clips the board
+# to a solid 255 (measured: 6.8 % of the frame saturated, board unreadable).
+# Manual exposure keeps the board mid-grey with no clipping.  Override per
+# deployment with PHARMACY_EXPOSURE=<n>; 200 is the calibrated value on this car; 400 clips the panel.
+exec ros2 run openni2_camera openni2_camera_driver --ros-args \
+  -r __ns:=/camera \
+  -r rgb/image_raw:=color/image_raw \
+  -r rgb/camera_info:=color/camera_info \
+  -p depth_registration:=false \
+  -p use_device_time:=true \
+  -p rgb_frame_id:=camera_rgb_frame \
+  -p ir_frame_id:=camera_ir_frame \
+  -p depth_frame_id:=camera_depth_frame \
+  -p auto_exposure:=true \

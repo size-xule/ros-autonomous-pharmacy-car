@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# ROS's setup.bash reads normally-unset variables; relax `set -u` only here.
+set +u
+source /opt/ros/lyrical/setup.bash
+set -u
+exec python3 /usr/local/lib/openni2_mono8.py "$@"

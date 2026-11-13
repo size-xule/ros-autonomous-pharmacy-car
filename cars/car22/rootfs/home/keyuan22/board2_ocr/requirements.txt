@@ -1,0 +1,5 @@
+# Desktop / venv install:  pip install -r requirements.txt
+rapidocr==3.10.0
+onnxruntime==1.31.1
+# pulled in automatically: opencv-python-headless, numpy, pillow, shapely,
+# pyclipper, pyyaml, requests, six, tqdm

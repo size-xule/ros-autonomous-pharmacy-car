@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# usage: iscc-cam-apply [auto|<exposure>]
+set +u
+source /opt/ros/lyrical/setup.bash
+export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-1}"
+NODE="${ISCC_CAM_NODE:-/camera/openni2_camera}"
+ARG="${1:-auto}"
+if [ "$ARG" = "auto" ]; then
+  for _ in 1 2 3; do
+    if timeout 8 ros2 param set "$NODE" auto_exposure true >/dev/null 2>&1; then
+      echo "[iscc] camera auto-exposure ON"; exit 0
+    fi
+    sleep 2
+  done
+else
+  for _ in 1 2 3; do
+    if timeout 8 ros2 param set "$NODE" auto_exposure false >/dev/null 2>&1 &&
+       timeout 8 ros2 param set "$NODE" exposure "$ARG" >/dev/null 2>&1; then
+      echo "[iscc] camera exposure locked to $ARG"; exit 0
+    fi
+    sleep 2
+  done
+fi
+exit 1

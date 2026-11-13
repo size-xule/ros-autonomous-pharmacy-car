@@ -1,0 +1,22 @@
+[Unit]
+Description=EPRobot Cartographer 2D mapping (manual start)
+Documentation=file:///home/ubuntu/eprobot_cartographer/README.md
+After=eprobot-base.service lslidar.service
+Wants=eprobot-base.service
+Conflicts=eprobot-slam.service eprobot-nav.service
+
+[Service]
+Type=simple
+User=keyuan22
+Group=keyuan22
+Environment=ROS_DOMAIN_ID=1
+Environment=RCUTILS_LOGGING_BUFFERED_STREAM=1
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/bin/bash -lc 'source /opt/ros/lyrical/setup.bash && source /opt/eprobot_ws/install/setup.bash && exec ros2 launch /home/ubuntu/eprobot_cartographer/launch/cartographer_mapping.launch.py'
+KillSignal=SIGINT
+KillMode=mixed
+TimeoutStopSec=15
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

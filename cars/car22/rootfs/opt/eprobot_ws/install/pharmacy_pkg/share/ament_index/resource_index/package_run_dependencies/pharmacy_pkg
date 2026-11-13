@@ -1,0 +1,1 @@
+rclcpp;rclcpp_action;std_msgs;geometry_msgs;nav_msgs;sensor_msgs;nav2_msgs;tf2;tf2_ros;tf2_geometry_msgs;cv_bridge;ament_index_cpp;nlohmann_json;libopencv-dev;libzbar-dev;libssl-dev;launch;launch_ros;v4l2_camera;python3;ament_cmake_gtest

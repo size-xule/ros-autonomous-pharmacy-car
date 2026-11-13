@@ -1,0 +1,17 @@
+[Unit]
+Description=Throttled /scan copy for remote RViz (visualisation only)
+After=eprobot-base.service lslidar.service
+
+[Service]
+Type=simple
+User=keyuan22
+Group=keyuan22
+Environment=ROS_DOMAIN_ID=1
+Environment=ISCC_VIZ_HZ=3
+Environment=FASTDDS_BUILTIN_TRANSPORTS=UDPv4
+ExecStart=/bin/bash -lc 'source /opt/ros/lyrical/setup.bash && exec python3 /home/keyuan22/iscc_scan_viz.py'
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

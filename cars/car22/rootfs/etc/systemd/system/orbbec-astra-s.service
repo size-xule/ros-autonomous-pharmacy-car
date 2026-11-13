@@ -1,0 +1,25 @@
+[Unit]
+Description=Orbbec Astra S color camera driver
+After=network-online.target
+Wants=network-online.target
+Before=eprobot-pharmacy.service
+
+[Service]
+Type=simple
+User=keyuan22
+Group=keyuan22
+SupplementaryGroups=video audio
+WorkingDirectory=/opt/orbbec/1.10.37/share
+Environment=HOME=/home/keyuan22
+Environment=ROS_DOMAIN_ID=1
+Environment=RCUTILS_LOGGING_BUFFERED_STREAM=1
+Environment=LD_LIBRARY_PATH=/opt/orbbec/1.10.37/lib
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/bin/bash -lc "source /opt/ros/lyrical/setup.bash && source /home/keyuan22/ros2_ws/install/setup.bash && exec ros2 run orbbec_astra_s_ros orbbec_astra_s_node --ros-args -p uvc_backend:=libuvc -p enable_ir:=false -p enable_color:=true -p enable_depth:=false -p color_publish_rate:=15.0 -p publish_rate:=5.0"
+Restart=always
+RestartSec=3
+KillSignal=SIGINT
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

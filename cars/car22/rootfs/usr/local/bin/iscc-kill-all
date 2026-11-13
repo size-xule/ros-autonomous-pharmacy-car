@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Hard stop of the whole ROS 2 stack, leaving no FastDDS shared memory behind.
+# Order matters: kill processes FIRST, then stop units, otherwise systemd's
+# Restart= policy respawns a node that immediately recreates its shm segment.
+UNITS="eprobot-pharmacy eprobot-nav eprobot-slam lslidar eprobot-base eprobot-imu orbbec-camera image-relay camera-shim nav-tune-web camera-exposure"
+for p in f1_mission_node mission.launch.py "ros2 launch" nav2_ lslidar openni2_camera yesense eprobot_base component_container image_relay ros2-daemon ros2cli.daemon; do
+  pkill -9 -f "$p" >/dev/null 2>&1 || true
+done
+sleep 2
+for u in $UNITS; do systemctl stop "$u" >/dev/null 2>&1 || true; done
+sleep 2
+for u in $UNITS; do systemctl stop "$u" >/dev/null 2>&1 || true; done
+sleep 2
+n=$(ls /dev/shm 2>/dev/null | grep -c '^fastdds_')
+rm -f /dev/shm/fastdds_* 2>/dev/null || true
+sleep 3
+rm -f /dev/shm/fastdds_* 2>/dev/null || true
+left=$(ls /dev/shm 2>/dev/null | grep -c '^fastdds_')
+procs=$(pgrep -af 'nav2_|lslidar|eprobot_base|yesense|openni2|component_container|image_relay|ros2 launch' | grep -v pgrep | wc -l)
+echo "[iscc] shm removed=$n remaining=$left  leftover_procs=$procs"
+for u in $UNITS; do printf "  [%s] %s\n" "$(systemctl is-active $u)" "$u"; done

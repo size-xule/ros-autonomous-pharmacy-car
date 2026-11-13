@@ -1,0 +1,16 @@
+camera:
+  ros__parameters:
+    # ROS 1 uvc_camera requested /dev/video0 at 640x480@15 fps.  ROS 2
+    # v4l2_camera (Lyrical) has no fps parameter, so camera.launch.py runs
+    # `v4l2-ctl --set-parm` before the node opens the device; verify the result
+    # with `ros2 topic hz`.
+    # mono8 matches what the active consumers (QR, board-2 fast) request from
+    # cv_bridge: their conversion becomes a zero-copy view and the topic drops
+    # from 921,600 B to 307,200 B per frame.
+    # Publish as /camera/rgb/image_raw from the launch remap.
+    video_device: /dev/video0
+    image_size: [640, 480]
+    pixel_format: YUYV
+    output_encoding: mono8
+    camera_frame_id: camera_rgb_frame
+    camera_info_url: ''

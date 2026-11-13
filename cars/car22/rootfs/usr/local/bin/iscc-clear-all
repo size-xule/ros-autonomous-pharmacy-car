@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Sweep leftovers that make `iscc pre` slow: stray ros2 CLI calls, duplicate
+# camera drivers, the ros2 daemon, stale FastDDS segments (only when nothing
+# ROS is alive) and old grab files.
+set +u
+killed=0
+MAIN=$(systemctl show -p MainPID --value openni2-camera 2>/dev/null)
+for p in $(pgrep -f openni2_camera_driver 2>/dev/null); do
+  cur=$p; keep=0
+  for _ in 1 2 3 4 5; do
+    [ "$cur" = "$MAIN" ] && { keep=1; break; }
+    [ -z "$cur" ] || [ "$cur" = "1" ] && break
+    cur=$(awk '{print $4}' /proc/$cur/stat 2>/dev/null) || break
+  done
+  if [ "$keep" = 0 ]; then kill -9 "$p" 2>/dev/null && killed=$((killed+1)); fi
+done
+cli=$(pgrep -f 'ros2 topic|ros2 param|ros2 lifecycle|ros2 node list|ros2 node info' 2>/dev/null | wc -l)
+pkill -9 -f 'ros2 topic' 2>/dev/null; pkill -9 -f 'ros2 param' 2>/dev/null
+pkill -9 -f 'ros2 lifecycle' 2>/dev/null; pkill -9 -f 'ros2 node ' 2>/dev/null
+pkill -9 -f 'ros2 daemon' 2>/dev/null; pkill -9 -f 'ros2cli.daemon' 2>/dev/null
+if pgrep -f 'nav2_|lslidar_driver|eprobot_base|yesense_node|openni2_camera_driver|image_relay' >/dev/null 2>&1; then
+  shm="kept (ROS nodes alive)"
+else
+  n=$(ls /dev/shm 2>/dev/null | grep -c '^fastdds_'); rm -f /dev/shm/fastdds_* 2>/dev/null
+  shm="removed $n"
+fi
+rm -f /tmp/rec.pgm /tmp/crop.pgm /tmp/cam.raw /tmp/cam.meta /tmp/pick.py 2>/dev/null || true
+echo "[iscc] clear: dup_drivers_killed=$killed stale_cli=$cli ros2_daemon=stopped shm=$shm"

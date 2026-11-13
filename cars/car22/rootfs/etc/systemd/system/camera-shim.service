@@ -1,0 +1,18 @@
+[Unit]
+Description=Grayscale camera stand-in for the pharmacy stack (Astra S has no UVC)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=keyuan22
+Group=keyuan22
+Environment=ROS_DOMAIN_ID=1
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/bin/bash -lc 'source /opt/ros/lyrical/setup.bash && exec python3 /home/keyuan22/camera_shim/camera_shim.py'
+Restart=on-failure
+RestartSec=3
+KillSignal=SIGINT
+
+[Install]
+WantedBy=multi-user.target

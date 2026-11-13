@@ -1,0 +1,27 @@
+[Unit]
+Description=Orbbec Astra S via OpenNI2 (IR on /camera/rgb/image_raw)
+After=network-online.target
+Wants=network-online.target
+Before=eprobot-pharmacy.service
+
+[Service]
+# Fast DDS shared memory keeps one lock per participant; repeated restarts
+# exhaust it ('Failed init_port fastdds_portXXXX') and then Nav2 action
+# servers stop acknowledging goals.  UDP-only avoids the whole SHM path.
+Environment=FASTDDS_BUILTIN_TRANSPORTS=UDPv4
+Type=simple
+User=keyuan22
+Group=keyuan22
+SupplementaryGroups=video
+Environment=HOME=/home/keyuan22
+Environment=ROS_DOMAIN_ID=1
+Environment=RCUTILS_LOGGING_BUFFERED_STREAM=1
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/local/bin/openni2-camera
+Restart=on-failure
+RestartSec=3
+KillSignal=SIGINT
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

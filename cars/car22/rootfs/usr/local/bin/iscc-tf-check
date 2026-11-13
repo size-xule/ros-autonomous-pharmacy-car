@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set +u
+source /opt/ros/lyrical/setup.bash
+export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-1}"
+export FASTDDS_BUILTIN_TRANSPORTS=UDPv4
+exec python3 /home/keyuan22/iscc_tf_check.py "$@"

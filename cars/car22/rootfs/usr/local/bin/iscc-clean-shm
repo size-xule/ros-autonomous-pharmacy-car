@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Remove FastDDS shared-memory segments left behind by exited ROS 2 processes.
+# Safe only when no ROS 2 node is expected to stay alive.
+n=$(ls /dev/shm 2>/dev/null | grep -c '^fastdds_' || true)
+rm -f /dev/shm/fastdds_* 2>/dev/null || true
+left=$(ls /dev/shm 2>/dev/null | grep -c '^fastdds_' || true)
+echo "[iscc] fastdds shm: removed $n, remaining $left"

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Re-enumerate the Orbbec camera. Astra S is USB2.0 and occasionally
+# renegotiates a mode that exceeds the bus budget, after which every frame is
+# "Image buffer is corrupt"; an unbind/bind cycle restores a clean stream.
+D=$(for d in /sys/bus/usb/devices/*/; do
+      [ "$(cat "$d/idVendor" 2>/dev/null)" = "2bc5" ] && basename "$d"
+    done | head -1)
+[ -z "$D" ] && { echo "[iscc] orbbec device not found"; exit 1; }
+systemctl stop openni2-camera image-relay >/dev/null 2>&1 || true
+sleep 1
+echo "$D" > /sys/bus/usb/drivers/usb/unbind 2>/dev/null || true
+sleep 2
+echo "$D" > /sys/bus/usb/drivers/usb/bind 2>/dev/null || true
+sleep 3
+echo "[iscc] usb reset: $D"

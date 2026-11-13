@@ -1,0 +1,7 @@
+# Aliyun public NTP.  This Pi has no RTC, so a cold boot starts with a wildly
+# wrong clock; the default Ubuntu NTS pools sit ~130-200 ms away and the NTS
+# certificate dance can stall early boot.  Plain NTP at ~10 ms lets chrony
+# step to the right time quickly, before Nav2 starts and builds its TF cache.
+server ntp1.aliyun.com iburst prefer
+server ntp2.aliyun.com iburst
+server ntp.aliyun.com  iburst

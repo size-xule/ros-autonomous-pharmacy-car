@@ -1,0 +1,22 @@
+[Unit]
+Description=OpenNI2 Astra S IR -> mono8 for the pharmacy QR stack
+After=openni2-camera.service
+Wants=openni2-camera.service
+Before=eprobot-pharmacy.service
+
+[Service]
+Type=simple
+User=keyuan22
+Group=keyuan22
+Environment=HOME=/home/keyuan22
+Environment=ROS_DOMAIN_ID=1
+Environment=RCUTILS_LOGGING_BUFFERED_STREAM=1
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/local/bin/openni2-mono8
+Restart=on-failure
+RestartSec=3
+KillSignal=SIGINT
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

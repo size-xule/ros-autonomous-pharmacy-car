@@ -1,0 +1,33 @@
+[Unit]
+Description=LSLIDAR M10 driver (manual start; radar is OFF by default)
+Documentation=file:///opt/eprobot_ws/README.md
+After=eprobot-base.service
+Wants=eprobot-base.service
+
+[Service]
+# Fast DDS shared memory keeps one lock per participant; repeated restarts
+# exhaust it ('Failed init_port fastdds_portXXXX') and then Nav2 action
+# servers stop acknowledging goals.  UDP-only avoids the whole SHM path.
+Environment=FASTDDS_BUILTIN_TRANSPORTS=UDPv4
+Type=simple
+User=keyuan22
+Group=dialout
+Environment=ROS_DOMAIN_ID=1
+Environment=RCUTILS_LOGGING_BUFFERED_STREAM=1
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/local/bin/lslidar-ctl start
+ExecStop=/usr/local/bin/lslidar-ctl stop
+ExecStopPost=/usr/local/bin/lslidar-ctl post-stop
+KillSignal=SIGINT
+# Only signal the `ros2 launch` parent: it forwards SIGINT to the driver node.
+# With the default control-group mode both get SIGINT and the second one wedges
+# the driver during shutdown.
+KillMode=mixed
+TimeoutStopSec=12
+Restart=no
+LimitNOFILE=4096
+
+# Deliberately not enabled at boot.  Start it by hand:
+#   sudo systemctl start lslidar.service
+[Install]
+WantedBy=multi-user.target

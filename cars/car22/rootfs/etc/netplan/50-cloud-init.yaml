@@ -1,0 +1,21 @@
+network:
+  version: 2
+  renderer: networkd
+  wifis:
+    wlan0:
+      addresses:
+      - "10.211.121.22/24"
+      nameservers:
+        addresses:
+        - 114.114.114.114
+        - 223.5.5.5
+      dhcp4: false
+      dhcp6: false
+      routes:
+      - to: "default"
+        via: "10.211.121.1"
+      access-points:
+        "OnePlusAce5":
+          auth:
+            key-management: "psk"
+            password: "WIFI_PASSWORD_HERE"

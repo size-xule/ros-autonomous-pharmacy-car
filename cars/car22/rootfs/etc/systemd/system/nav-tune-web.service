@@ -1,0 +1,25 @@
+[Unit]
+Description=Nav2 live parameter tuning web page (0.0.0.0:8766)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Fast DDS shared memory keeps one lock per participant; repeated restarts
+# exhaust it ('Failed init_port fastdds_portXXXX') and then Nav2 action
+# servers stop acknowledging goals.  UDP-only avoids the whole SHM path.
+Environment=FASTDDS_BUILTIN_TRANSPORTS=UDPv4
+Type=simple
+User=keyuan22
+Group=keyuan22
+Environment=ROS_DOMAIN_ID=1
+Environment=PYTHONUNBUFFERED=1
+Environment=NAV_TUNE_NODES=/controller_server,/planner_server,/behavior_server,/bt_navigator,/map_server,/amcl,/global_costmap/global_costmap,/local_costmap/local_costmap
+Environment=NAV_TUNE_BASELINE=/home/ubuntu/eprobot_navigation/config/nav2_params.yaml
+WorkingDirectory=/home/ubuntu/nav_tune_web
+ExecStart=/bin/bash -lc "source /opt/ros/lyrical/setup.bash && source /opt/eprobot_ws/install/setup.bash && exec python3 /home/ubuntu/nav_tune_web/nav_tune_web.py --host 0.0.0.0 --port 8766 --local"
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=5
+
+[Install]
+WantedBy=multi-user.target

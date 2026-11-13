@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nav2 在线调参</title>
+<style>
+  :root {
+    --bg: #0e1116; --panel: #161b22; --panel2: #1c2230; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --blue: #58a6ff; --green: #3fb950;
+    --warn: #d29922; --red: #f85149; --hot: #bc8cff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 13px/1.45 ui-sans-serif, system-ui, "Noto Sans CJK SC", sans-serif; }
+  header { position: sticky; top: 0; z-index: 20; display: flex; gap: 12px;
+           align-items: center; padding: 10px 16px; background: var(--panel);
+           border-bottom: 1px solid var(--border); }
+  header h1 { font-size: 15px; margin: 0 8px 0 0; font-weight: 600; }
+  .tag { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .grow { flex: 1; }
+  button { background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+           border-radius: 6px; padding: 5px 10px; cursor: pointer; font: inherit; }
+  button:hover { border-color: var(--blue); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; }
+  button.primary:hover { background: #388bfd; }
+  label.chk { color: var(--muted); display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+  input[type=checkbox] { accent-color: var(--blue); }
+  .layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); height: calc(100vh - 49px); }
+  aside { border-right: 1px solid var(--border); padding: 10px; overflow: auto; }
+  aside .node { display: flex; justify-content: space-between; gap: 8px; padding: 6px 8px;
+                border-radius: 6px; cursor: pointer; color: var(--muted); }
+  aside .node > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  aside .node:hover { background: var(--panel2); color: var(--text); }
+  aside .node.active { background: #1f6feb33; color: var(--text); border: 1px solid #1f6feb88; }
+  aside .node.bad { color: var(--red); }
+  aside .count { flex: none; white-space: nowrap; font-variant-numeric: tabular-nums; font-size: 11px; }
+  main { overflow: auto; padding: 12px 16px 40px; }
+  .toolbar { position: sticky; top: 0; z-index: 10; display: flex; gap: 10px;
+             align-items: center; padding: 8px 0 10px; background: var(--bg); }
+  .toolbar input[type=search] { flex: 1; max-width: 360px; background: var(--panel);
+             border: 1px solid var(--border); color: var(--text); border-radius: 6px;
+             padding: 6px 10px; font: inherit; }
+  .banner { margin: 0 0 12px; padding: 10px 12px; border-radius: 6px;
+            background: #f851491a; border: 1px solid #f8514966; color: #ffb3ad; }
+  .banner.ok { background: #3fb9501a; border-color: #3fb95066; color: #9be9a8; }
+  h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 18px 0 8px;
+       letter-spacing: .02em; }
+  h2:first-child { margin-top: 0; }
+  .hot { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 10px; }
+  .hot .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .hot .card.changed { border-color: var(--warn); }
+  .hot .card .top { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 2px; }
+  .hot .card .name { font-weight: 600; }
+  .hot .card .sub { color: var(--muted); font-size: 11px; margin-bottom: 8px; }
+  .hot .card .row { display: flex; gap: 8px; align-items: center; }
+  .hot input[type=range] { flex: 1; accent-color: var(--hot); min-width: 0; }
+  .hot input[type=number] { width: 74px; background: var(--panel2); color: var(--text);
+                            border: 1px solid var(--border); border-radius: 5px; padding: 4px 6px; font: inherit; }
+  .hot .base { color: var(--muted); font-size: 11px; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { position: sticky; top: 44px; z-index: 5; background: var(--bg); color: var(--muted);
+             font-weight: 500; text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  tbody td { padding: 3px 8px; border-bottom: 1px solid #21262d; vertical-align: middle; }
+  tbody tr:hover { background: #ffffff05; }
+  tbody tr.changed { background: #d299220d; }
+  td.pname { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  td.base { color: var(--muted); font-family: ui-monospace, monospace; font-size: 12px; }
+  td.act { width: 74px; text-align: right; }
+  input.val { width: 100%; background: var(--panel); border: 1px solid var(--border);
+              color: var(--text); border-radius: 5px; padding: 4px 7px;
+              font-family: ui-monospace, monospace; font-size: 12px; }
+  input.val:focus { outline: none; border-color: var(--blue); }
+  select.val { width: 100%; background: var(--panel); border: 1px solid var(--border);
+               color: var(--text); border-radius: 5px; padding: 4px 7px; font: inherit; }
+  .badge { font-size: 10px; padding: 1px 5px; border-radius: 10px; border: 1px solid var(--warn);
+           color: var(--warn); margin-left: 6px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; background: var(--muted); }
+  .dot.ok { background: var(--green); }
+  .dot.bad { background: var(--red); }
+  #status.busy { color: var(--warn); }
+  #status.ok { color: var(--green); }
+  #status.err { color: var(--red); }
+  a.doc { color: var(--blue); text-decoration: none; white-space: nowrap; }
+  a.doc:hover { text-decoration: underline; }
+  #toast { position: fixed; right: 18px; bottom: 18px; display: flex; flex-direction: column;
+           gap: 8px; z-index: 50; pointer-events: none; }
+  #toast div { background: var(--panel2); border: 1px solid var(--border); border-left: 3px solid var(--green);
+               padding: 8px 12px; border-radius: 6px; max-width: 420px; box-shadow: 0 6px 24px #0008; }
+  #toast div.err { border-left-color: var(--red); }
+  dialog { background: var(--panel); color: var(--text); border: 1px solid var(--border);
+           border-radius: 10px; max-width: 720px; width: 90vw; }
+  dialog::backdrop { background: #000a; }
+  dialog pre { background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+               padding: 10px; max-height: 50vh; overflow: auto; font-size: 12px; }
+  .empty { color: var(--muted); padding: 20px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Nav2 在线调参</h1>
+  <span class="tag" id="target">—</span>
+  <a class="doc" href="https://docs.nav2.org/lyrical/configuration_and_development/tuning_guide/"
+     target="_blank" rel="noopener">官方调参手册</a>
+  <a class="doc" href="https://docs.nav2.org/lyrical/configuration_and_development/configuration_guide/controller_plugins/configuring_regulated_pp/"
+     target="_blank" rel="noopener">RPP 参数</a>
+  <span class="grow"></span>
+  <span id="status" class="tag"></span>
+  <button id="refresh">刷新</button>
+  <label class="chk"><input type="checkbox" id="auto" checked> 自动刷新</label>
+  <button id="export">导出改动</button>
+</header>
+
+<div class="layout">
+  <aside id="nodes"></aside>
+  <main>
+    <div class="toolbar">
+      <input type="search" id="filter" placeholder="过滤参数名…">
+      <label class="chk"><input type="checkbox" id="hotOnly"> 只看热点</label>
+      <label class="chk"><input type="checkbox" id="changedOnly"> 只看已改</label>
+    </div>
+    <div id="banner"></div>
+    <section id="hot"></section>
+    <section id="tables"></section>
+  </main>
+</div>
+
+<div id="toast"></div>
+<dialog id="exportDlg">
+  <h3 style="margin-top:0">当前与 YAML 不同的参数</h3>
+  <pre id="exportText"></pre>
+  <div style="display:flex; gap:8px; justify-content:flex-end">
+    <button id="copyExport">复制</button>
+    <button id="closeExport">关闭</button>
+  </div>
+</dialog>
+
+<script>
+"use strict";
+
+const HOT = [
+  {node:"/controller_server", param:"FollowPath.desired_linear_vel", label:"巡航速度 desired_linear_vel", unit:"m/s", min:0.10, max:1.50, step:0.10},
+  {node:"/controller_server", param:"FollowPath.max_angular_vel", label:"最大角速度 max_angular_vel", unit:"rad/s", min:0.20, max:3.00, step:0.10},
+  {node:"/controller_server", param:"FollowPath.max_angular_accel", label:"角加速度 max_angular_accel", unit:"rad/s²", min:0.20, max:6.00, step:0.20},
+  {node:"/controller_server", param:"FollowPath.min_linear_vel", label:"最低线速度 min_linear_vel", unit:"m/s", min:0.05, max:0.50, step:0.05},
+  {node:"/controller_server", param:"FollowPath.regulated_linear_scaling_min_speed", label:"转弯降速下限", unit:"m/s", min:0.05, max:0.80, step:0.05},
+  {node:"/controller_server", param:"FollowPath.regulated_linear_scaling_min_radius", label:"转弯降速半径", unit:"m", min:0.20, max:3.00, step:0.10},
+  {node:"/controller_server", param:"FollowPath.lookahead_dist", label:"前视距离 lookahead_dist", unit:"m", min:0.20, max:1.50, step:0.10},
+  {node:"/controller_server", param:"FollowPath.min_lookahead_dist", label:"最小前视距离 min_lookahead_dist", unit:"m", min:0.20, max:1.20, step:0.05},
+  {node:"/controller_server", param:"FollowPath.lookahead_time", label:"前视时间 lookahead_time", unit:"s", min:0.20, max:2.00, step:0.10},
+  {node:"/controller_server", param:"FollowPath.max_allowed_time_to_collision_up_to_carrot", label:"前视点碰撞时限", unit:"s", min:0.10, max:1.00, step:0.10},
+  {node:"/controller_server", param:"FollowPath.vx_max", label:"最高速度 vx_max", unit:"m/s", min:0.10, max:1.50, step:0.10},
+  {node:"/controller_server", param:"FollowPath.vx_min", label:"倒车速度 vx_min", unit:"m/s", min:-1.00, max:0.00, step:0.10},
+  {node:"/controller_server", param:"FollowPath.ax_max", label:"加速上限 ax_max", unit:"m/s²", min:0.20, max:5.00, step:0.20},
+  {node:"/controller_server", param:"FollowPath.ax_min", label:"减速上限 ax_min", unit:"m/s²", min:-5.00, max:-0.20, step:0.20},
+  {node:"/controller_server", param:"FollowPath.wz_max", label:"最大角速度 wz_max", unit:"rad/s", min:0.20, max:3.00, step:0.10},
+  {node:"/planner_server", param:"GridBased.minimum_turning_radius", label:"最小转弯半径", unit:"m", min:0.20, max:1.50, step:0.10},
+  {node:"/planner_server", param:"GridBased.tolerance", label:"规划容差", unit:"m", min:0.05, max:0.60, step:0.05},
+  {node:"/global_costmap/global_costmap", param:"inflation_layer.inflation_radius", label:"全局膨胀半径", unit:"m", min:0.05, max:0.60, step:0.05},
+  {node:"/local_costmap/local_costmap", param:"inflation_layer.inflation_radius", label:"局部膨胀半径", unit:"m", min:0.05, max:0.60, step:0.05},
+  {node:"/global_costmap/global_costmap", param:"inflation_layer.cost_scaling_factor", label:"全局代价衰减", unit:"", min:1, max:30, step:1},
+  {node:"/local_costmap/local_costmap", param:"inflation_layer.cost_scaling_factor", label:"局部代价衰减", unit:"", min:1, max:30, step:1},
+  {node:"/amcl", param:"max_particles", label:"AMCL 最大粒子数", unit:"", min:500, max:5000, step:500},
+];
+
+let DATA = null;
+let ACTIVE = "ALL";
+let LAST_LOAD = 0;
+let LOADING = false;
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({
+  "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
+}[c]));
+
+function fmt(v) {
+  if (v === null || v === undefined) return "null";
+  if (Array.isArray(v)) return JSON.stringify(v);
+  if (typeof v === "boolean") return v ? "true" : "false";
+  if (typeof v === "number") return Number.isInteger(v) ? String(v) : String(+v.toFixed(6));
+  return String(v);
+}
+
+function sameVal(a, b) {
+  if (typeof a === "number" && typeof b === "number") return Math.abs(a - b) < 1e-9;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function setStatus(text, cls) {
+  const el = $("status");
+  el.textContent = text;
+  el.className = "tag " + (cls || "");
+}
+
+function toast(text, cls, ms) {
+  const box = document.createElement("div");
+  if (cls === "err") box.className = "err";
+  box.textContent = text;
+  $("toast").appendChild(box);
+  setTimeout(() => box.remove(), ms || 2600);
+}
+
+function paramsOf(node) {
+  const entry = DATA && DATA.nodes ? DATA.nodes[node] : null;
+  return entry && entry.params ? entry.params : null;
+}
+
+function baselineOf(node, param) {
+  const base = DATA && DATA.baseline ? DATA.baseline[node] : null;
+  return base && Object.prototype.hasOwnProperty.call(base, param) ? base[param] : undefined;
+}
+
+function isChanged(node, param, value) {
+  const base = baselineOf(node, param);
+  return base !== undefined && !sameVal(base, value);
+}
+
+function hotKeysFor(node) {
+  return new Set(HOT.filter((h) => h.node === node).map((h) => h.param));
+}
+
+async function load(silent) {
+  if (LOADING) return;
+  LOADING = true;
+  if (!silent) setStatus("读取中…", "busy");
+  try {
+    const res = await fetch("/api/params", {cache: "no-store"});
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    DATA = await res.json();
+    LAST_LOAD = Date.now();
+    render();
+    const t = new Date().toLocaleTimeString();
+    setStatus(`已刷新 ${DATA.elapsed}s · ${t}`, "ok");
+  } catch (err) {
+    setStatus("刷新失败: " + err.message, "err");
+  } finally {
+    LOADING = false;
+  }
+}
+
+function render() {
+  if (!DATA) return;
+  $("target").textContent = DATA.robot;
+  renderNodes();
+  renderBanner();
+  renderHot();
+  renderTables();
+}
+
+function renderNodes() {
+  const nodes = DATA.nodes || {};
+  const anyRunning = Object.values(nodes).some((n) => n.params);
+  let html = `<div class="node ${ACTIVE === "ALL" ? "active" : ""}" data-node="ALL">
+                <span>全部节点</span><span class="count">${anyRunning ? "live" : "—"}</span></div>`;
+  for (const [node, entry] of Object.entries(nodes)) {
+    const ok = !!entry.params;
+    const count = ok ? Object.keys(entry.params).length : "未运行";
+    html += `<div class="node ${ACTIVE === node ? "active" : ""} ${ok ? "" : "bad"}" data-node="${esc(node)}"
+                 title="${esc(entry.error || "")}">
+               <span><span class="dot ${ok ? "ok" : "bad"}"></span> ${esc(node)}</span>
+               <span class="count">${count}</span></div>`;
+  }
+  $("nodes").innerHTML = html;
+}
+
+function renderBanner() {
+  const nodes = DATA.nodes || {};
+  const running = Object.keys(nodes).filter((n) => nodes[n].params).length;
+  let html = "";
+  if (running === 0) {
+    const firstErr = Object.values(nodes).find((n) => n.error);
+    html = `<div class="banner"><b>Nav2 未运行。</b> 先在车上执行 <code>iscc pre</code>，
+            然后点“刷新”。${firstErr ? "（" + esc(firstErr.error) + "）" : ""}</div>`;
+  } else if (running < Object.keys(nodes).length) {
+    html = `<div class="banner ok">已连接 ${running} 个节点；灰色节点当前未运行。</div>`;
+  }
+  $("banner").innerHTML = html;
+}
+
+function renderHot() {
+  const cards = [];
+  for (const hot of HOT) {
+    if (ACTIVE !== "ALL" && ACTIVE !== hot.node) continue;
+    const params = paramsOf(hot.node);
+    if (!params || !Object.prototype.hasOwnProperty.call(params, hot.param)) continue;
+    const value = params[hot.param];
+    if (typeof value !== "number") continue;
+    const base = baselineOf(hot.node, hot.param);
+    const changed = isChanged(hot.node, hot.param, value);
+    cards.push(`
+      <div class="card ${changed ? "changed" : ""}" data-node="${esc(hot.node)}" data-param="${esc(hot.param)}">
+        <div class="top"><span class="name">${esc(hot.label)}</span>
+          <span class="base">${changed ? `YAML ${fmt(base)}` : ""}</span></div>
+        <div class="sub">${esc(hot.node)} · ${esc(hot.param)}${changed ? '<span class="badge">已改</span>' : ""}</div>
+        <div class="row">
+          <input type="range" min="${hot.min}" max="${hot.max}" step="${hot.step}" value="${value}">
+          <input type="number" min="${hot.min}" max="${hot.max}" step="${hot.step}" value="${value}">
+          <button class="apply">应用</button>
+        </div>
+      </div>`);
+  }
+  $("hot").innerHTML = cards.length ? `<h2>热点参数</h2><div class="hot">${cards.join("")}</div>` : "";
+}
+
+function rowHtml(node, param, value) {
+  const base = baselineOf(node, param);
+  const changed = isChanged(node, param, value);
+  let input;
+  if (typeof value === "boolean") {
+    input = `<select class="val"><option value="true"${value ? " selected" : ""}>true</option>
+             <option value="false"${value ? "" : " selected"}>false</option></select>`;
+  } else if (typeof value === "number") {
+    input = `<input class="val" type="number" step="any" value="${esc(fmt(value))}">`;
+  } else {
+    input = `<input class="val" type="text" value="${esc(fmt(value))}">`;
+  }
+  return `<tr class="${changed ? "changed" : ""}" data-node="${esc(node)}" data-param="${esc(param)}">
+            <td class="pname">${esc(param)}${changed ? '<span class="badge">已改</span>' : ""}</td>
+            <td>${input}</td>
+            <td class="base">${base === undefined ? "—" : esc(fmt(base))}</td>
+            <td class="act"><button class="apply">应用</button></td>
+          </tr>`;
+}
+
+function renderTables() {
+  const filter = $("filter").value.trim().toLowerCase();
+  const hotOnly = $("hotOnly").checked;
+  const changedOnly = $("changedOnly").checked;
+  const nodes = DATA.nodes || {};
+  const parts = [];
+  for (const [node, entry] of Object.entries(nodes)) {
+    if (ACTIVE !== "ALL" && ACTIVE !== node) continue;
+    if (!entry.params) continue;
+    const hots = hotKeysFor(node);
+    const rows = [];
+    for (const [param, value] of Object.entries(entry.params).sort((a, b) => a[0].localeCompare(b[0]))) {
+      if (filter && !param.toLowerCase().includes(filter)) continue;
+      if (hotOnly && !hots.has(param)) continue;
+      if (changedOnly && !isChanged(node, param, value)) continue;
+      rows.push(rowHtml(node, param, value));
+    }
+    if (!rows.length) continue;
+    parts.push(`<h2>${esc(node)} <span class="count">${rows.length}</span></h2>
+      <table><thead><tr><th>参数</th><th>当前值（运行中）</th><th>YAML</th><th></th></tr></thead>
+      <tbody>${rows.join("")}</tbody></table>`);
+  }
+  $("tables").innerHTML = parts.length ? parts.join("") :
+    `<div class="empty">没有匹配的参数。${Object.values(nodes).some((n) => n.params) ? "" : "先启动 Nav2。"}</div>`;
+}
+
+async function apply(node, param, value, holder) {
+  const buttons = holder.querySelectorAll("button.apply");
+  buttons.forEach((b) => (b.disabled = true));
+  const original = DATA && DATA.nodes && DATA.nodes[node] && DATA.nodes[node].params
+    ? DATA.nodes[node].params[param] : undefined;
+  const typed = yamlValue(value, original);
+  try {
+    const res = await fetch("/api/set", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({node, param, value: typed}),
+    });
+    const out = await res.json();
+    if (out.ok) {
+      const applied = out.value !== undefined && out.value !== null ? out.value : coerce(typed);
+      if (DATA && DATA.nodes && DATA.nodes[node] && DATA.nodes[node].params) {
+        DATA.nodes[node].params[param] = applied;
+        render();
+      }
+      toast(`已应用 ${param} = ${typed}`);
+    } else {
+      toast(`失败: ${out.message || "unknown error"}`, "err", 6000);
+    }
+  } catch (err) {
+    toast("请求失败: " + err.message, "err", 5000);
+  } finally {
+    buttons.forEach((b) => (b.disabled = false));
+  }
+}
+
+function coerce(text) {
+  if (text === "true") return true;
+  if (text === "false") return false;
+  try { return JSON.parse(text); } catch (err) { return text; }
+}
+
+function yamlScalar(value, like) {
+  if (typeof like === "number" && !Number.isInteger(like)) {
+    const n = Number(value);
+    if (Number.isFinite(n)) return Number.isInteger(n) ? n.toFixed(1) : String(n);
+  }
+  if (typeof like === "boolean") return value === true || value === "true" ? "true" : "false";
+  if (typeof like === "string") return JSON.stringify(String(value));
+  return String(value);
+}
+
+function yamlValue(text, original) {
+  if (typeof original === "number") {
+    const n = Number(text);
+    if (!Number.isFinite(n)) return text;
+    if (Number.isInteger(original)) return String(Math.trunc(n));
+    return Number.isInteger(n) ? n.toFixed(1) : String(n);
+  }
+  if (typeof original === "boolean") return text === "true" ? "true" : "false";
+  if (Array.isArray(original)) {
+    try {
+      const arr = JSON.parse(text);
+      if (!Array.isArray(arr)) return text;
+      return "[" + arr.map((v, i) => yamlScalar(v, original[i])).join(", ") + "]";
+    } catch (err) {
+      return text;
+    }
+  }
+  return text;
+}
+
+function changedLines() {
+  const lines = [];
+  for (const [node, entry] of Object.entries(DATA.nodes || {})) {
+    if (!entry.params) continue;
+    for (const [param, value] of Object.entries(entry.params)) {
+      if (isChanged(node, param, value)) {
+        lines.push(`${node} ${param}: ${fmt(baselineOf(node, param))} -> ${fmt(value)}`);
+      }
+    }
+  }
+  return lines;
+}
+
+document.addEventListener("click", (ev) => {
+  const nodeEl = ev.target.closest("aside .node");
+  if (nodeEl) {
+    ACTIVE = nodeEl.dataset.node;
+    renderNodes();
+    renderHot();
+    renderTables();
+    return;
+  }
+  const applyBtn = ev.target.closest("button.apply");
+  if (applyBtn) {
+    const holder = applyBtn.closest("tr, .card");
+    const input = holder.querySelector("input.val, select.val, input[type=number]");
+    if (input) apply(holder.dataset.node, holder.dataset.param, input.value, holder);
+  }
+});
+
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "Enter") return;
+  const input = ev.target.closest("input.val");
+  if (!input) return;
+  const holder = input.closest("tr");
+  if (holder) apply(holder.dataset.node, holder.dataset.param, input.value, holder);
+});
+
+$("hot").addEventListener("input", (ev) => {
+  const range = ev.target.closest("input[type=range]");
+  if (!range) return;
+  const card = range.closest(".card");
+  card.querySelector("input[type=number]").value = range.value;
+});
+
+$("hot").addEventListener("change", (ev) => {
+  const range = ev.target.closest("input[type=range]");
+  if (!range) return;
+  const card = range.closest(".card");
+  apply(card.dataset.node, card.dataset.param, range.value, card);
+});
+
+$("filter").addEventListener("input", renderTables);
+$("hotOnly").addEventListener("change", renderTables);
+$("changedOnly").addEventListener("change", renderTables);
+$("refresh").addEventListener("click", () => load(false));
+$("auto").addEventListener("change", (ev) => { if (ev.target.checked) load(true); });
+
+$("export").addEventListener("click", () => {
+  if (!DATA) return;
+  const lines = changedLines();
+  $("exportText").textContent = lines.length ? lines.join("\n") :
+    "没有与 YAML 不同的参数。";
+  $("exportDlg").showModal();
+});
+$("copyExport").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText($("exportText").textContent);
+    toast("已复制");
+  } catch (err) {
+    toast("复制失败，请手动选择", "err");
+  }
+});
+$("closeExport").addEventListener("click", () => $("exportDlg").close());
+
+setInterval(() => {
+  if (!$("auto").checked) return;
+  const el = document.activeElement;
+  if (el && el.matches && el.matches("input, select, textarea")) return;
+  load(true);
+}, 60000);
+
+load(false);
+</script>
+</body>
+</html>

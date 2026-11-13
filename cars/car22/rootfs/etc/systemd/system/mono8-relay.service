@@ -1,0 +1,25 @@
+[Unit]
+Description=Convert Orbbec color to mono8 on /camera/rgb/image_raw (C++)
+After=openni2-camera.service
+Wants=openni2-camera.service
+
+[Service]
+# Fast DDS shared memory keeps one lock per participant; repeated restarts
+# exhaust it ('Failed init_port fastdds_portXXXX') and then Nav2 action
+# servers stop acknowledging goals.  UDP-only avoids the whole SHM path.
+Environment=FASTDDS_BUILTIN_TRANSPORTS=UDPv4
+Type=simple
+User=keyuan22
+Group=keyuan22
+Environment=ROS_DOMAIN_ID=1
+Environment=RCUTILS_LOGGING_BUFFERED_STREAM=1
+# The executable lives under lib/<pkg>/ (colcon), which is not on PATH, so the
+# absolute path is used.  Only the ROS environment has to be sourced for the
+# shared libraries and message typesupport.
+ExecStart=/bin/bash -lc 'source /opt/ros/lyrical/setup.bash && exec /home/keyuan22/relay_ws/install/mono8_relay/lib/mono8_relay/mono8_relay --ros-args -p max_fps:=10'
+Restart=on-failure
+RestartSec=2
+SyslogIdentifier=mono8-relay
+
+[Install]
+WantedBy=multi-user.target

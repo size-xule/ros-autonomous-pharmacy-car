@@ -1,0 +1,19 @@
+[Unit]
+Description=Convert Orbbec color to mono8 on /camera/rgb/image_raw
+After=orbbec-camera.service
+Wants=orbbec-camera.service
+[Service]
+Type=simple
+User=keyuan22
+Group=keyuan22
+Environment=ROS_DOMAIN_ID=1
+Environment=PYTHONUNBUFFERED=1
+Environment=ISCC_ENHANCE=0
+Environment=ISCC_SCALE=1
+Environment=ISCC_MAX_FPS=15
+ExecStart=/bin/bash -lc 'source /opt/ros/lyrical/setup.bash && exec python3 /home/keyuan22/camera_shim/image_relay.py'
+Restart=on-failure
+RestartSec=3
+KillSignal=SIGINT
+[Install]
+WantedBy=multi-user.target
