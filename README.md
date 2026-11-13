@@ -29,6 +29,7 @@ docs/
   竞赛笔记.md               ← ★ 主文档：从零 ROS 到独立跑一圈（3000+ 行）
   新车部署手册.md            ← ★ 把本仓库铺到一台新车上的完整步骤
   仓库结构与维护.md          ← 目录约定、怎么从车上更新、什么没入库
+  文件清单.md                ← ★ 自动生成：每一个文件 + 大小（717 项）
 cars/
   car22/                    ← 现在这台车（10.211.121.22 / EPRobot2）
     README.md               ← 本车档案（硬件/服务/话题/参数/已知问题）
@@ -120,7 +121,8 @@ iscc start                 # ★ 车会动
 - `/usr/local/bin` 全部辅助脚本（`iscc-*`、`openni2-camera`、`lslidar-ctl`）
 - 相机链：C++ `mono8_relay` **源码**、Orbbec OpenNI2 SDK（2.8 MB）
 - 板二 OCR：worker 源码 + PP-OCRv6 tiny 模型 + 13 张验收样图
-- `eprobot_base` / `lslidar_ros2` / `serial_ros2` / `yesense_*` **源码**（要 build）
+- **ROS 2 底盘驱动两套**：`eprobot_base`（**Python 参考实现，含 7 个测试文件**）+ `eprobot_base_cpp`（**车上实际在跑**：头文件 + 二进制，`.cpp` 实现缺失）
+- `lslidar_ros2` / `serial_ros2` / `yesense_*` **源码**（要 build）
 - **STM32 底盘固件源码**（RT-Thread，两个版本）+ 原理图 + 底层通信协议表
 
 **没有**（见 `docs/仓库结构与维护.md` 的"未入库清单"）：

@@ -1,15 +1,18 @@
 # car22 · 固件（下位机 + ROS 2 驱动）
 
-> ⚠️ **先把三个"固件"分开**，否则一定会搞混：
+> ⚠️ **先把四个东西分开**，否则一定会搞混：
 >
-> | 名字 | 跑在哪 | 语言/框架 | 在本仓库的位置 |
-> |---|---|---|---|
-> | **下位机固件**（底盘 MCU） | STM32F4 底盘板 | C / RT-Thread | `chassis_mcu/`（本目录） |
-> | **ROS 2 底盘驱动** | 树莓派 | C++ / rclcpp | `../../src/opt_eprobot_ws_src/eprobot_base/` |
-> | **任务层** | 树莓派 | C++（无源码） | `../../rootfs/opt/eprobot_ws/install/pharmacy_pkg/lib/` |
+> | # | 名字 | 跑在哪 | 语言 | 源码在仓库？ | 位置 |
+> |---|---|---|---|---|---|
+> | ① | **下位机固件**（底盘 MCU） | STM32F4 底盘板 | C / RT-Thread | ✅ **有，两个版本** | `chassis_mcu/*.7z`（本目录） |
+> | ② | **ROS 2 驱动 · Python 版**（参考实现） | 树莓派 | Python / rclpy | ✅ **有，含完整测试** | `../../src/opt_eprobot_ws_src/eprobot_base/` |
+> | ③ | **ROS 2 驱动 · C++ 版**（**车上实际在跑**） | 树莓派 | C++ / rclcpp | ⚠️ **只有头文件 + 二进制，`.cpp` 缺失** | `../../rootfs/opt/eprobot_ws/install/eprobot_base_cpp/` |
+> | ④ | **任务层** | 树莓派 | C++ | ❌ 只有二进制 | `../../rootfs/.../pharmacy_pkg/lib/` |
 >
 > **下位机固件与 ROS 1 / ROS 2 无关** —— 它只认串口字节流（`0x5A` 帧）。
-> 真正"适配 ROS 2"的是树莓派上那个 `eprobot_base` 节点。
+> 真正"适配 ROS 2"的是树莓派上的 ② 和 ③；两者协议完全一致（`eprobot_base_cpp` 的 `protocol.hpp` 头部原话：
+> *"Wire protocol v2.1, mirrored one-for-one from PROTOCOL.md and the proven Python implementation in ../eprobot_base/eprobot_base/protocol.py"*），
+> 所以 **② 的源码就是 ③ 的可读替代品**，改协议先看 Python 版。
 
 ---
 
@@ -17,10 +20,13 @@
 
 | 文件 | 说明 |
 |---|---|
-| `EPRobot_controller_1.3-20210520.7z` | **首选**。RT-Thread 工程 `Bottom_controller`，最新一版（2021-05-20） |
+| `EPRobot_controller_1.3-20210520.7z` | **首选**。RT-Thread 工程 `Bottom_controller`，最新一版（2021-05-20）；内含 **959 个 `.c` / 1053 个 `.h`**，共约 3800 个条目 |
 | `EPRobot_controller_1.3-20210415.7z` | 较早一版（2021-04-15），保留对照 |
 | `EPRobot_base_sch_V1.3.pdf` | 底盘原理图 V1.3 |
 | `EPRobot智能小车底层通信协议.xlsx` | 厂商协议表（与本仓库文档 §5.3 的实测结论可能有出入，**以实测为准**） |
+
+> **验证过**：`7z l` 确认包含完整源码树 `applications/` + `rt-thread/` 组件 + `Debug/` 编译产物，
+> 不是"只给 hex/bin"的固件包。
 
 解压后是 Eclipse CDT / RT-Thread Studio 工程，关键源码：
 
@@ -113,18 +119,31 @@ ros2 topic echo --once /imu/data    # 有四元数
 /odom /imu_data /battery ◄── 0x0A / 0x14 / 0x08 ◄──┘
 ```
 
-它的**可调参数**（都在 `/opt/eprobot_ws/install/eprobot_base_cpp/share/eprobot_base_cpp/config/base.yaml`
-与 launch 里，不在 MCU 固件里）：
+它的**可调参数**（在 `/opt/eprobot_ws/install/eprobot_base_cpp/share/eprobot_base_cpp/config/base.yaml`，不在 MCU 固件里）。
 
-| 参数 | 本车值 | 作用 |
-|---|---|---|
-| `wheelbase` | 0.160 | 与 MCU 的 0.1445 存在 9.7% 差（未解项） |
-| `base_kv` | 1.089 | 里程标定 +8.9% |
-| `min_nonzero_speed` | 0.08 | 低速粘滞补偿（低于它车不动） |
-| `yaw_sign` / `gyro_sign` | −1 / +1 | 修 `0x0A` 的符号相反 |
-| PID | 1000/100/0（行驶）、100/30/0（停转） | 每帧写入 MCU，**覆盖固件默认值** |
+> ⚠️ **一套参数只服务一代车**。下表左列是历史 ROS 1 车的值，右列才是 **`.22` 现在真在用的 C++ 驱动**。
+> 换车/换驱动时以**实际加载的 yaml** 为准，不要互相抄。
 
-源码在 `../../src/opt_eprobot_ws_src/eprobot_base/`，改完 `colcon build` 即可，**不用碰下位机**。
+| 参数 | ROS 1 车（历史） | **ROS 2 车 `.22`（在用）** | 说明 |
+|---|---|---|---|
+| `axle_length` / `wheelbase` | 0.160 | **0.171** | 含转向连杆/角度比例补偿；注释说物理轴距 0.160 |
+| `base_kv` | 1.089 | **1.0** | `.22` 不额外放大（注释：固件 `D=0.065` 与实测轮径一致） |
+| `max_vx` | 0.9（TEB 限） | **1.2** | 主机上限 |
+| `max_steer_mrad` | 30000（±30°） | **567**（≈45° 舵机 / 32.5° 前轮） | 与固件 `kSteerMaxMrad` 取小值 |
+| `min_vx` / `min_nonzero_speed` | 0.08 | **0.05** | 低于它车不动 |
+| `kp` / `ki` / `kd` | 1000 / 100 / 0 | **500 / 100 / 0** | 每帧写入 MCU，**覆盖固件默认** |
+| `publish_tf` | false（TF 归 EKF） | **true** | `.22` 由驱动自己发 `odom→base_link` |
+| `cmd_rate_hz` / `odom_rate_hz` | 50 / 50 | **30 / 50** | 指令 30 Hz、里程 50 Hz |
+| `h30_topic` / `h30_timeout_s` | — | `/imu/data` / 0.3 | 用 H30 的 yaw 出里程 |
+
+**改哪个？**
+- 改**协议/运动学/IMU 信任** → 看 Python 版 `../../src/opt_eprobot_ws_src/eprobot_base/`（有 `test/` 七个测试文件，可先跑通再移植到 C++）。
+- 改**参数** → 只改 `base.yaml`，然后 `sudo systemctl restart eprobot-base`，**不用碰下位机**。
+- 改**下位机行为**（舵机限位、PID 默认、新增上报字段）→ 才需要动 `chassis_mcu/` 里的固件源码。
+
+**`.22` 的 C++ 驱动是"半开源"状态**：`include/eprobot_base_cpp/*.hpp`（6 个头文件）在仓库里，
+但 `.cpp` 实现从未随包发布，车上也找不到（`find / -name eprobot_base_cpp -not -path '*/install/*'` 返回空）。
+所以**要改 C++ 实现只能先按 Python 版重写**。
 
 ---
 

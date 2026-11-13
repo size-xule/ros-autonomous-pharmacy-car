@@ -1,0 +1,173 @@
+#pragma once
+
+#include <cstdint>
+#include <deque>
+#include <functional>
+#include <map>
+#include <memory>
+#include <optional>
+#include <string>
+#include <tuple>
+#include <utility>
+#include <vector>
+
+#include "eprobot_base_cpp/protocol.hpp"
+#include "eprobot_base_cpp/transport.hpp"
+
+namespace eprobot_base {
+
+enum class State { kClosed, kDraining, kHandshake, kReady, kFault, kError };
+
+std::string to_string(State state);
+const char* state_name(State state);
+
+struct ClientConfig {
+  double cmd_period = 0.033;
+  double keepalive_period = 0.25;
+  double ack_timeout = 0.05;
+  double handshake_timeout = 0.5;
+  int handshake_retries = 3;
+  double reconnect_interval = 2.0;
+  double drain_time = 0.2;
+  double telemetry_stale_timeout = 0.2;
+  double link_timeout = 0.4;
+  double cmd_timeout = 0.5;
+  int max_vx_mm_s = 1000;
+  int max_steer_mrad = kSteerMaxMrad;
+  int kp = 350;
+  int ki = 500;
+  int kd = 0;
+  bool auto_clear_faults = true;
+  double fault_stop_interval = 0.25;
+  int laser_mode = 0;
+  double query_timeout = 0.15;
+  int query_retries = 1;
+};
+
+struct Stats {
+  std::uint64_t rx_frames = 0;
+  std::uint64_t tx_frames = 0;
+  std::uint64_t telemetry_frames = 0;
+  std::uint64_t ack_frames = 0;
+  std::uint64_t imu_frames = 0;
+  std::uint64_t diag_frames = 0;
+  std::uint64_t crc_errors = 0;
+  std::uint64_t length_errors = 0;
+  std::uint64_t bytes_dropped = 0;
+  std::uint64_t unknown_frames = 0;
+  std::uint64_t stop_sent = 0;
+  std::uint64_t stop_acked = 0;
+  std::uint64_t velocity_sent = 0;
+  std::map<int, std::uint64_t> status_counts;
+  std::uint64_t state_changes = 0;
+  std::uint64_t reconnects = 0;
+  std::string last_error;
+};
+
+struct ClientCallbacks {
+  std::function<void(const Telemetry&, const Frame&)> on_telemetry;
+  std::function<void(const ImuRaw&, const Frame&)> on_imu;
+  std::function<void(const Diag&, const Frame&)> on_diag;
+  std::function<void(int command, int seq, int status)> on_status;
+  std::function<void(State old_state, State new_state, const std::string& reason)>
+      on_state;
+  std::function<void(const std::string&)> on_error;
+};
+
+class ChassisClient {
+ public:
+  explicit ChassisClient(std::shared_ptr<Transport> transport,
+                         ClientConfig config = ClientConfig{},
+                         ClientCallbacks callbacks = ClientCallbacks{},
+                         std::function<double()> clock = nullptr);
+
+  void open(double now = -1.0);
+  void close(double now = -1.0);
+  bool ready() const { return state == State::kReady; }
+
+  double telemetry_age(double now = -1.0) const;
+  bool telemetry_stale(double now = -1.0) const;
+
+  void set_setpoint(int vx_mm_s, int delta_mrad, double now = -1.0);
+  void clear_setpoint();
+  void stop(double now = -1.0, const std::string& reason = "operator");
+  bool set_laser(int mode, double now = -1.0);
+  bool query_imu(double now = -1.0);
+  bool query_diag(double now = -1.0);
+
+  void poll(double now = -1.0);
+  void send_stop(double now = -1.0, const std::string& reason = "",
+                 bool force = false);
+
+  double resolve_now(double now) const;
+
+  std::shared_ptr<Transport> transport;
+  ClientConfig config;
+  ClientCallbacks callbacks;
+  std::function<double()> clock;
+
+  FrameParser parser;
+  State state = State::kClosed;
+  Stats stats;
+
+  std::optional<Telemetry> telemetry;
+  std::optional<ImuRaw> imu_raw;
+  std::optional<Diag> diag;
+  double last_telemetry_time = 0.0;
+  double last_imu_time = 0.0;
+  double last_diag_time = 0.0;
+  std::optional<std::tuple<int, int, int>> last_status;
+  int laser_mode = 0;
+  std::deque<std::string> events;
+  double last_rx_time = 0.0;
+
+ private:
+  struct Pending {
+    std::vector<std::uint8_t> frame;
+    double sent_at = 0.0;
+    int retries = 0;
+    std::string kind;
+  };
+
+  int next_seq();
+  void write_frame(const std::vector<std::uint8_t>& frame, double now);
+  void handle_frame(const Frame& frame, double now);
+  void handle_telemetry_flags(const Telemetry& telemetry, double now);
+  bool telemetry_armed() const;
+  void tick(double now);
+  void send_periodic(double now);
+  void expire_pending(double now);
+  void send_velocity(int vx_mm_s, int delta_mrad, double now);
+  void send_laser(int mode, double now);
+  std::optional<int> pending_laser_mode_for_seq(int seq);
+  bool send_query(std::uint8_t type, double now);
+  void clear_pending_query(std::uint8_t type);
+  void auto_rearm(double now, const std::string& reason);
+  void auto_stop_for_fault(double now);
+  void try_reopen(double now);
+  void enter_error(double now, const std::string& message);
+  void sync_parser_stats();
+  void change_state(State new_state, const std::string& reason);
+  void report_error(const std::string& message);
+
+  double now_ = 0.0;
+  int seq_ = 0;
+  double drain_until_ = 0.0;
+  double handshake_started_ = 0.0;
+  int handshake_tries_ = 0;
+  double error_since_ = 0.0;
+  double last_tx_time_ = 0.0;
+  double last_velocity_tx_ = 0.0;
+  double last_stop_tx_ = 0.0;
+  double last_auto_stop_ = 0.0;
+  double last_setpoint_time_ = 0.0;
+  bool stop_acked_ = false;
+  std::map<std::pair<std::uint8_t, std::uint8_t>, Pending> pending_;
+  std::optional<Pending> pending_query_;
+  std::map<std::uint8_t, int> pending_laser_mode_;
+  std::pair<int, int> setpoint_{0, 0};
+  bool want_velocity_ = false;
+  std::optional<int> pending_laser_;
+};
+
+}  // namespace eprobot_base

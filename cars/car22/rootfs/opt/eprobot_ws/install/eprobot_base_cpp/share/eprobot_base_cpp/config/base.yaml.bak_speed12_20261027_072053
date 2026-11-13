@@ -1,0 +1,40 @@
+# EPRobot chassis driver (wire protocol v2.1), C++ implementation.
+eprobot_base:
+  ros__parameters:
+    transport: serial
+    port: /dev/EPRobot_base
+    baudrate: 115200
+    socket_host: 127.0.0.1
+    socket_port: 15461
+
+    base_kv: 1.0
+    axle_length: 0.171
+    track_width: 0.155
+    max_vx: 1.0
+    # Full steering travel: 567 mrad = 32.5 deg equivalent front wheel =
+    # 45 deg servo (the firmware's BM_PROTO_STEER_MAX_MRAD).  Raise only
+    # together with kSteerMaxMrad; the host clamps to the lower of the two.
+    max_steer_mrad: 567
+    min_turn_speed: 0.0
+    min_vx: 0.05
+
+    cmd_rate_hz: 30.0
+    cmd_timeout: 0.5
+    telemetry_timeout: 0.2
+    link_timeout: 0.4
+
+    kp: 500.0
+    ki: 100.0
+    kd: 0.0
+
+    publish_tf: true
+    odom_frame: odom
+    base_frame: base_link
+    h30_topic: /imu/data
+    h30_timeout_s: 0.3
+    h30_rate_hz: 100.0
+    odom_rate_hz: 50.0
+    diagnostics_rate_hz: 1.0
+
+    auto_clear_faults: true
+    laser_mode: 0

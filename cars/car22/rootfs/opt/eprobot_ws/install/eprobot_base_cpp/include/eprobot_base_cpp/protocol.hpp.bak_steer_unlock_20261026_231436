@@ -1,0 +1,182 @@
+#pragma once
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <stdexcept>
+#include <string>
+#include <variant>
+#include <vector>
+
+namespace eprobot_base {
+
+// Wire protocol v2.1, mirrored one-for-one from PROTOCOL.md and the proven
+// Python implementation in ../eprobot_base/eprobot_base/protocol.py.
+inline constexpr std::uint8_t kFrameHeader = 0x5A;
+inline constexpr std::size_t kFrameMin = 6;
+inline constexpr std::size_t kFrameMax = 72;
+inline constexpr double kPartialTimeoutS = 0.050;
+
+inline constexpr std::uint8_t kTypeSetVelocity = 0x01;
+inline constexpr std::uint8_t kTypeStop = 0x02;
+inline constexpr std::uint8_t kTypeSetLaser = 0x03;
+inline constexpr std::uint8_t kTypeGetImu = 0x11;
+inline constexpr std::uint8_t kTypeGetDiag = 0x12;
+
+inline constexpr std::uint8_t kTypeTelemetry = 0xC0;
+inline constexpr std::uint8_t kTypeAckSetVelocity = 0x81;
+inline constexpr std::uint8_t kTypeAckStop = 0x82;
+inline constexpr std::uint8_t kTypeAckSetLaser = 0x83;
+inline constexpr std::uint8_t kTypeImuRaw = 0x91;
+inline constexpr std::uint8_t kTypeDiag = 0x92;
+
+inline constexpr int kStatusOk = 0;
+inline constexpr int kStatusUnknownCmd = 1;
+inline constexpr int kStatusInterlock = 2;
+inline constexpr int kStatusFaultLatched = 3;
+inline constexpr int kStatusBusy = 4;
+inline constexpr int kStatusRange = 5;
+inline constexpr int kStatusStale = 6;
+
+inline constexpr std::uint8_t kFlagArmed = 1U << 0;
+inline constexpr std::uint8_t kFlagFault = 1U << 1;
+inline constexpr std::uint8_t kFlagCalFailed = 1U << 2;
+inline constexpr std::uint8_t kFlagImuOk = 1U << 3;
+inline constexpr std::uint8_t kFlagGyroFsOk = 1U << 4;
+inline constexpr std::uint8_t kFlagBraking = 1U << 5;
+inline constexpr std::uint8_t kFlagStalled = 1U << 6;
+inline constexpr std::uint8_t kFlagLaserOn = 1U << 7;
+
+inline constexpr int kVxMaxMmS = 1500;
+inline constexpr int kSteerMaxMrad = 524;
+inline constexpr int kGainHold = -1;
+inline constexpr int kGainMin = 0;
+inline constexpr int kGainMax = 32767;
+inline constexpr double kDlpfDelayMs = 3.0;
+inline constexpr std::uint8_t kAgeInvalid = 255;
+
+class ProtocolError : public std::runtime_error {
+ public:
+  using std::runtime_error::runtime_error;
+};
+
+std::uint16_t crc16(const std::uint8_t* data, std::size_t length);
+std::uint16_t crc16(const std::vector<std::uint8_t>& data);
+
+std::vector<std::uint8_t> build_frame(
+    std::uint8_t type, std::uint8_t seq,
+    const std::vector<std::uint8_t>& payload = {});
+std::vector<std::uint8_t> build_unknown_ack(
+    std::uint8_t type, std::uint8_t seq, int status = kStatusUnknownCmd);
+
+std::vector<std::uint8_t> encode_set_velocity(
+    int vx_mm_s, int delta_mrad, int seq, int kp = 35, int ki = 5, int kd = 0);
+std::vector<std::uint8_t> encode_stop(int seq);
+std::vector<std::uint8_t> encode_set_laser(int mode, int seq);
+std::vector<std::uint8_t> encode_get_imu(int seq);
+std::vector<std::uint8_t> encode_get_diag(int seq);
+
+struct Frame {
+  std::uint8_t type = 0;
+  std::uint8_t seq = 0;
+  std::vector<std::uint8_t> payload;
+  std::vector<std::uint8_t> raw;
+  double rx_time = 0.0;
+
+  // A 7-byte uplink frame is a generic ACK; return its command type (bit7
+  // cleared), otherwise nullopt.
+  std::optional<int> ack_for() const;
+  std::optional<int> status() const;
+};
+
+class FrameParser {
+ public:
+  explicit FrameParser(double partial_timeout = kPartialTimeoutS);
+
+  void reset();
+  std::vector<Frame> feed(const std::uint8_t* data, std::size_t length, double now);
+  std::vector<Frame> feed(const std::vector<std::uint8_t>& data, double now);
+  bool tick(double now);
+
+  std::size_t buffered() const { return buffer_.size(); }
+  double partial_timeout() const { return partial_timeout_; }
+
+  std::size_t crc_errors = 0;
+  std::size_t length_errors = 0;
+  std::size_t bytes_dropped = 0;
+  std::size_t consecutive_crc_errors = 0;
+
+ private:
+  void drop_one();
+  std::optional<std::size_t> expected_length(std::uint8_t type) const;
+
+  double partial_timeout_ = kPartialTimeoutS;
+  std::vector<std::uint8_t> buffer_;
+  double last_byte_time_ = 0.0;
+};
+
+struct Flags {
+  std::uint8_t raw = 0;
+
+  bool armed() const { return (raw & kFlagArmed) != 0; }
+  bool fault() const { return (raw & kFlagFault) != 0; }
+  bool cal_failed() const { return (raw & kFlagCalFailed) != 0; }
+  bool imu_ok() const { return (raw & kFlagImuOk) != 0; }
+  bool gyro_fs_ok() const { return (raw & kFlagGyroFsOk) != 0; }
+  bool braking() const { return (raw & kFlagBraking) != 0; }
+  bool stalled() const { return (raw & kFlagStalled) != 0; }
+  bool laser_on() const { return (raw & kFlagLaserOn) != 0; }
+  std::vector<std::string> names() const;
+  std::string str() const;
+};
+
+struct Telemetry {
+  std::int16_t vx_mm_s = 0;
+  std::int16_t yaw_cdeg = 0;
+  std::int16_t gyro_cdps = 0;
+  std::int16_t pwm_left = 0;
+  std::int16_t pwm_right = 0;
+  std::uint16_t steer_us = 0;
+  std::uint16_t battery_mv = 0;
+  Flags flags;
+  std::uint8_t age_ms = 0;
+
+  double vx_mps() const { return vx_mm_s / 1000.0; }
+  double yaw_deg() const { return yaw_cdeg / 100.0; }
+  double gyro_dps() const { return gyro_cdps / 100.0; }
+  bool age_valid() const { return age_ms != kAgeInvalid; }
+  bool imu_trusted() const;
+};
+
+struct ImuRaw {
+  int status = 0;
+  std::array<double, 3> gyro_dps{};
+  std::array<double, 3> accel_mm_s2{};
+  std::array<double, 4> quaternion{};  // w, x, y, z
+};
+
+struct Diag {
+  int status = 0;
+  std::array<int, 3> raw_accel{};
+  std::array<int, 3> raw_gyro{};
+  std::array<double, 3> accel_mm_s2{};
+  std::array<double, 3> gyro_dps{};
+  std::array<double, 4> quaternion{};
+  std::array<double, 3> euler_deg{};
+  Flags flags;
+  std::uint16_t dt_ticks = 0;
+  std::uint16_t i2c_errors = 0;
+};
+
+Telemetry decode_telemetry(const std::vector<std::uint8_t>& payload);
+ImuRaw decode_imu_raw(const std::vector<std::uint8_t>& payload);
+Diag decode_diag(const std::vector<std::uint8_t>& payload);
+
+using DecodedFrame = std::variant<std::monostate, Telemetry, ImuRaw, Diag>;
+DecodedFrame decode_frame(const Frame& frame);
+
+std::string status_name(int status);
+std::vector<Frame> parse_one(const std::vector<std::uint8_t>& data, double now = 0.0);
+
+}  // namespace eprobot_base
