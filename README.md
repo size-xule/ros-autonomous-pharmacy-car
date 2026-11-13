@@ -1,19 +1,21 @@
 # ros-autonomous-pharmacy-car
 
-> 项目原名：**ROS 自主避障小车**（ISCC「智慧药房」赛项用车）
+> **项目原名**：ROS 自主避障小车（ISCC「智慧药房」赛项用车）
+> **成果说明**：本项目为 **cxy** 与 **xl** 于 **2026 年在宁波大学科学技术学院（宁大科院）** 共同调试完成的成果。
 > 平台：EPRobot / 树莓派 4B / Ubuntu 26.04 + ROS 2 Lyrical（另有历史 ROS 1 Melodic 车）
-> 仓库性质：**私有**。含厂商二进制、比赛配置、内部文档，请勿外传。
+> 仓库性质：**公开**。内含厂商固件与任务层二进制，版权归原厂所有，仅用于学习与竞赛复现（见 [`NOTICE.md`](NOTICE.md)）。
 
 ---
 
 ## 这个仓库是干什么的
 
-把一个**能跑的比赛车**完整地存下来，做到两件事：
+把一个**能跑的比赛车**完整地存下来，做到三件事：
 
 1. **换车/重刷后能恢复**：把 `cars/car22/rootfs/` 铺到一台同型号车上，装 unit、建软链、编 src，就能跑到和现在一样的水平。
-2. **让 AI 或新人接手时不用从零摸索**：所有"为什么这么配""踩过什么坑""参数改了会怎样"都写在 `docs/` 里。
+2. **下位机也能重烧**：`cars/car22/firmware/` 放了 STM32 底盘固件源码（RT-Thread）、原理图、底层通信协议表。
+3. **让 AI 或新人接手时不用从零摸索**：所有"为什么这么配""踩过什么坑""参数改了会怎样"都写在 `docs/` 里。
 
-**一句话**：`cars/` 是"能跑的东西"，`docs/` 是"为什么能跑"。
+**一句话**：`cars/` 是"能跑的东西"，`docs/` 是"为什么能跑"，`tools/wsl/` 是"平时怎么操作它"。
 
 ---
 
@@ -21,6 +23,7 @@
 
 ```
 README.md                   ← 你在这里
+NOTICE.md                   ← 第三方/厂商材料声明
 .gitattributes              ← 保证 Linux 上还原成 LF、二进制不被改
 docs/
   竞赛笔记.md               ← ★ 主文档：从零 ROS 到独立跑一圈（3000+ 行）
@@ -30,13 +33,17 @@ cars/
   car22/                    ← 现在这台车（10.211.121.22 / EPRobot2）
     README.md               ← 本车档案（硬件/服务/话题/参数/已知问题）
     rootfs/                 ← 直接可拷到 / 的成品：install 产物、配置、unit、脚本、模型
-    src/                    ← 需要在新车 colcon build 的源码
+    src/                    ← 需要在新车 colcon build 的源码（含 ROS 2 底盘驱动）
+    firmware/
+      chassis_mcu/          ← ★ STM32 底盘固件源码（两个版本）+ 原理图 + 协议表
+      README.md             ← 固件与 ROS 2 的关系、关键参数、烧录/核对方法
   car21/                    ← 预留位（初代机 10.211.121.21，卡被拔走）
     README.md               ← 占位说明 + 从 SD 卡导出的方法
     export_from_sd.sh       ← 在 .22 上跑，把 .21 的卡内容整理成同样的结构
 install/
   apply_to_car22.sh         ← 一键铺到新车（默认 dry-run，需 --yes 才写）
 tools/
+  wsl/                      ← ★ WSL 快捷指令全套（iscc / car* / rviz-car / ros_env.sh）
   host-iscc/                ← 主机侧（WSL）iscc 工具箱 + 配置模板
   probes/                   ← 只读诊断脚本（网络/相机/IMU/CPU）
   backup_car.sh             ← 从车上只读打包一份快照回来
@@ -68,6 +75,21 @@ iscc start                 # ★ 车会动
 
 ---
 
+## 全套脚本一览（三层，别混）
+
+| 层 | 跑在哪 | 入口 | 说明 |
+|---|---|---|---|
+| **主机层** | Windows 里的 WSL | `iscc` | 远程操作车：`pre / start / stop / kill / status / gray / camtime / rviz2`。见 `tools/wsl/` |
+| **车上成品层** | 车的 `/opt` `/home` `/etc` | `eprobot-*` systemd unit | 底盘/IMU/雷达/相机/Nav2/识别/裁判，见 `cars/car22/rootfs/` |
+| **下位机层** | STM32 底盘板 | 串口 `0x5A` 协议 | 运动学 + PID + 舵机，见 `cars/car22/firmware/` |
+
+> ⚠️ 三个"固件"不是一回事：
+> - **下位机固件**（`firmware/chassis_mcu/`）= STM32 上的 RT-Thread 工程，管电机/舵机/PID。**它与 ROS 1/ROS 2 都无关**，只认串口字节流。
+> - **ROS 2 底盘驱动**（`src/opt_eprobot_ws_src/eprobot_base/`）= 树莓派上跑的 C++ 节点，把 `/cmd_vel` 翻译成串口帧、把回包翻译成 `/odom` `/imu/data`。
+> - **任务层**（`rootfs/.../lib/pharmacy_pkg/`）= 比赛逻辑，只有二进制。
+
+---
+
 ## 两台车（别搞混）
 
 | | **car22（本仓库主目标）** | **car21（预留）** |
@@ -95,12 +117,13 @@ iscc start                 # ★ 车会动
 - 相机链：C++ `mono8_relay` **源码**、Orbbec OpenNI2 SDK（2.8 MB）
 - 板二 OCR：worker 源码 + PP-OCRv6 tiny 模型 + 13 张验收样图
 - `eprobot_base` / `lslidar_ros2` / `serial_ros2` / `yesense_*` **源码**（要 build）
+- **STM32 底盘固件源码**（RT-Thread，两个版本）+ 原理图 + 底层通信协议表
 
 **没有**（见 `docs/仓库结构与维护.md` 的"未入库清单"）：
 - `cartographer` / `cartographer_ros`（9 MB，上游标准包，apt 装）
 - `board2_ocr/runtime_arm64`（**276 MB** 的打包 Python 运行时，按 `requirements.txt` 重装）
 - ROS 本体 `/opt/ros/lyrical`（apt 装）
-- 任何密码、密钥、`iscc.conf` 真本（只放 `iscc.conf.example`）
+- 任何密码、密钥、`iscc.conf` 真本（只放 `iscc.conf.example`；WiFi 密码也是占位符）
 
 ---
 
@@ -109,13 +132,13 @@ iscc start                 # ★ 车会动
 - **最后同步**：2026-11-13，从 `keyuan22@10.211.121.22` 只读打包（未改动车上任何文件）。
 - 仓库内容按"**能恢复**"标准整理，**但恢复后仍需现场标定航点**——坐标是"这辆车+这块场地"的量出来的，换了车必须重标（见竞赛笔记 §7.5）。
 - 二进制为 **aarch64**，不能在 x86 上跑。
-- 本仓库不含任何授权许可，仅限队内使用。
+- 厂商固件/SDK/二进制的版权归原厂，本项目仅作学习与竞赛复现用途，**不提供任何担保**。详见 [`NOTICE.md`](NOTICE.md)。
 
 ---
 
 ## 怎么拿到"项目压缩包"
 
-- **网页**：打开仓库 → 绿色 `Code` 按钮 → **Download ZIP**（含全部二进制与模型，约 40 MB）
+- **网页**：打开仓库 → 绿色 `Code` 按钮 → **Download ZIP**（含全部二进制、模型与固件，约 60 MB）
 - **命令行**：
   ```bash
   git clone https://github.com/size-xule/ros-autonomous-pharmacy-car.git
@@ -126,7 +149,8 @@ iscc start                 # ★ 车会动
 ## 把压缩包交给 AI 时，这样说话
 
 > 这是一个 ROS 2（Lyrical / 树莓派 4B / Ubuntu 26.04）比赛车的完整运行时快照。
-> `cars/car22/rootfs/` 里的路径就是车上的绝对路径，`cars/car22/src/` 需要 colcon build。
+> `cars/car22/rootfs/` 里的路径就是车上的绝对路径，`cars/car22/src/` 需要 colcon build，
+> `cars/car22/firmware/chassis_mcu/` 是 STM32 下位机固件（烧到 MCU，不是树莓派）。
 > 请读 `docs/新车部署手册.md`，帮我把这套东西铺到一台新车上；先做 dry-run 给我看要改哪些文件，
 > 再按 `install/apply_to_car22.sh` 的步骤执行。注意：WiFi 密码和 SSH 密码是占位符，要我提供真值；
 > 航点必须重新标定，不要直接沿用 `mission_waypoints.yaml` 里的坐标。
@@ -135,3 +159,11 @@ iscc start                 # ★ 车会动
 1. 不要改 `cars/car22/rootfs/opt/.../lib/pharmacy_pkg/` 下的**二进制**（无源码，改了就用不了）。
 2. 不要跳过备份；`install/apply_to_car22.sh` 默认 dry-run，别一上来就 `--yes`。
 3. 不要在 `.22` 这台上直接铺（脚本会拒绝，除非 `--force`）。
+
+---
+
+## 致谢
+
+本项目由 **cxy** 与 **xl** 于 **2026 年**在 **宁波大学科学技术学院（宁大科院）** 共同调试完成。
+硬件平台与底层固件来自 EPRobot（北京塔洛斯科技），赛项规则来自中国机器人及人工智能大赛组委会。
+仓库中的调试记录、参数标定与文档由两位作者整理。

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# iscc21 - iscc bundle for the OTHER car (10.211.121.21, ROS 2 Lyrical, 20261026).
+# Deliberately separate from ~/bin/iscc (our car 24/25, ROS 1 Melodic, 10.211.121.24).
+set -euo pipefail
+
+# ~/ros_env.sh runs in every interactive shell and exports ROBOT_IP,
+# ROS_MASTER_URI, ROS_IP ... for OUR car. Drop them, otherwise this ROS 2
+# bundle would silently target 10.211.121.24 instead of .21.
+unset ROBOT_IP ROBOT_USER ROBOT_PASS ROS_MASTER_URI ROS_IP ROS_HOSTNAME
+
+export ROBOT_IP="${ISCC21_ROBOT_IP:-10.211.121.21}"
+export ISCC_CONFIG="${ISCC21_CONFIG:-$HOME/iscc-car21/iscc.conf}"
+
+exec "$HOME/iscc-car21/20261026/scripts/iscc" "$@"

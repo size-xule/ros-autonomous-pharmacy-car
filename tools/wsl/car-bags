@@ -1,0 +1,6 @@
+#!/bin/bash
+# car-bags —— 列出小车上所有抓包记录（最新在前）
+set -u
+exec ssh robot "ls -dt ~/bags/*/ 2>/dev/null | head -${1:-20} | while read d; do \
+  printf '%s  ' \"\$(du -sh \"\$d\" 2>/dev/null | cut -f1)\"; \
+  ls -1 \"\$d\" 2>/dev/null | tr '\n' ' '; echo \"  <- \$d\"; done"

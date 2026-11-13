@@ -1,0 +1,3 @@
+#!/bin/bash
+source ~/ros_env.sh
+exec rviz -d "${1:-}" "$@"

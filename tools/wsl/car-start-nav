@@ -1,0 +1,12 @@
+#!/bin/bash
+# 在小车上启动 cartographer 定位导航
+ssh robot 'bash -lc "
+export ROBOT_TYPE=EPRobotV2.3
+source /opt/ros/melodic/setup.bash
+source ~/robot_ws/devel/setup.bash
+source ~/carto_ws/install_isolated/setup.bash
+nohup roslaunch robot_navigation robot_localization.launch \
+  load_state_filename:=\$HOME/robot_ws/src/robot_navigation/maps/ISCC.pbstream \
+  planner:=teb > /tmp/navigator.txt 2>&1 &
+echo STARTED_PID=\$!
+"'

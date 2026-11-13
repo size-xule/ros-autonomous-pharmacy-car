@@ -1,0 +1,19 @@
+#!/bin/bash
+# ============================================================
+#  car-serial —— 在小车上解析串口抓包日志
+#
+#  用法:  car-serial [log路径] [tx|rx|all]
+#  例:    car-serial                    # 自动取最新一次抓包
+#         car-serial ~/bags/nav_x/serial_x.log
+#         car-serial ~/bags/nav_x/serial_x.log tx
+# ============================================================
+set -u
+LOG="${1:-}"
+MODE="${2:-all}"
+
+if [ -z "$LOG" ]; then
+  exec ssh robot "F=\$(ls -dt ~/bags/*/serial_*.log 2>/dev/null | head -1); \
+    [ -z \"\$F\" ] && { echo '没找到抓包日志，先运行 car-bag'; exit 1; }; \
+    echo \"最新日志: \$F\"; bash ~/car_serial_decode.sh \"\$F\" $MODE"
+fi
+exec ssh robot "bash ~/car_serial_decode.sh '$LOG' $MODE"

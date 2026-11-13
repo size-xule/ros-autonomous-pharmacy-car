@@ -11,6 +11,9 @@
 *.so.*   -text
 *.a      -text
 *.zip   -text
+*.7z    -text
+*.pdf   -text
+*.xlsx  -text
 *.tar.gz -text
 
 # 编译产物/ELF 可执行文件（无扩展名，靠 auto 识别为二进制）

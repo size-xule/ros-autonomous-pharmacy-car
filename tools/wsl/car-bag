@@ -1,0 +1,18 @@
+#!/bin/bash
+# ============================================================
+#  car-bag —— 在 WSL 里一键开始：录 rosbag + 抓 ART 底盘串口
+#
+#  用法:  car-bag [名字] [额外ROS话题...]
+#  例:    car-bag nav
+#         car-bag nav /scan /amcl_pose
+#
+#  结束:  Ctrl+C（bag 与串口日志一起收尾）
+#  输出:  小车 ~/bags/<名字>_<时间戳>/
+# ============================================================
+set -u
+NAME="${1:-nav}"
+shift 2>/dev/null || true
+EXTRA="$*"
+
+# ssh -t 分配 tty：sudo 提示密码、Ctrl+C 都依赖它
+exec ssh -t robot "bash ~/car_bag.sh $NAME $EXTRA"

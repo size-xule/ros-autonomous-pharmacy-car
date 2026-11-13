@@ -1,0 +1,2 @@
+#!/bin/bash
+ssh robot 'pkill -f "roslaunch robot_navigation" 2>/dev/null; pkill -f "roslaunch astra_launch" 2>/dev/null; pkill -f "roslaunch pharmacy_pkg" 2>/dev/null; echo STOPPED'

@@ -1,0 +1,7 @@
+#!/bin/bash
+ssh robot 'bash -lc "
+source /opt/ros/melodic/setup.bash
+source ~/robot_ws/devel/setup.bash
+nohup roslaunch pharmacy_pkg competition.launch > /tmp/competition.txt 2>&1 &
+echo STARTED_PID=\$!
+"'

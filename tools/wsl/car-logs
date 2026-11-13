@@ -1,0 +1,3 @@
+#!/bin/bash
+F=${1:-navigator}
+ssh robot "tail -f /tmp/${F}.txt"
