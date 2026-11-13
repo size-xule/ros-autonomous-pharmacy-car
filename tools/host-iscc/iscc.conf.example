@@ -1,24 +1,75 @@
-# iscc 配置模板 —— 复制到 ~/.config/iscc/iscc.conf 后填真值
-# 优先级：环境变量 > 本文件 > 脚本内默认值
-# 本文件本身可以入库；填了真密码的那份不要入库（.gitignore 已挡 iscc.conf）
+# iscc 配置模板
+# ---------------------------------------------------------------
+# 用法：
+#   mkdir -p ~/.config/iscc
+#   cp iscc.conf.example ~/.config/iscc/iscc.conf
+#   chmod 600 ~/.config/iscc/iscc.conf
+#   ${EDITOR:-nano} ~/.config/iscc/iscc.conf     # 把 PUT_PASSWORD_HERE 改成真值
+#
+# 优先级：**环境变量 > 本文件 > iscc 脚本内默认值**
+#   临时指向另一台车：ROBOT_IP=10.211.121.30 iscc version
+#
+# 本文件**可以入库**（全是占位符）；填了真密码的那份叫 iscc.conf，**永不入库**
+# （.gitignore 已挡；自查：git status --short | grep iscc.conf 应无输出）
+#
+# 填完怎么验：
+#   iscc version
+#   期望打印：robot: <ROBOT_USER>@<ROBOT_IP> / car_id: <CAR_ID> / domain: <ROS_DOMAIN_ID>
+#   这三项只要有一个不对，后面所有子命令都会作用在错的地方。
+# ---------------------------------------------------------------
 
-# 目标车（ROS 2 车 = 10.211.121.22；初代机 = 10.211.121.21）
+# ── 目标车 ────────────────────────────────────────────────────
+# 填法：车的 wlan0 静态 IP。现行两台：
+#   10.211.121.22  （car22 / ROS 2 Lyrical / 账号 keyuan22）← 默认
+#   10.211.121.21  （car21 / 初代机 / 账号 ubuntu / AP 模式）
+# 取值：10.211.121.0/24 网段的 IPv4
 ROBOT_IP="${ROBOT_IP:-10.211.121.22}"
+
+# 填法：SSH 登录账号。两台车不同，写错会 Permission denied
+#   car22 → keyuan22
+#   car21 → ubuntu
 ROBOT_USER="${ROBOT_USER:-keyuan22}"
 
-# 密码：改成真值。不要提交带密码的版本。
+# ── 密码（唯一必须改的项）─────────────────────────────────────
+# 填法：把 PUT_PASSWORD_HERE 换成车的 SSH 密码（sudo 在车上已免密，不用另填）
+# 取值：任意字符串；**不要含 `$` 或反引号**（会被 shell 展开）
+# 不填的后果：iscc 所有子命令都会失败在 ssh 认证
+# 想要真值：见 SECRETS.md §1 第 1 项（向队内负责人索取，不要提交进来）
 ROBOT_PASS="${ROBOT_PASS:-PUT_PASSWORD_HERE}"
 
-# 车型/裁判档位：24 => EPRobotV2.2 + JUDGE_ID=2；25 => EPRobotV2.3 + JUDGE_ID=1
-# 注意：这不是"第几号车"，只是档位（见 docs/竞赛笔记.md §2.1）
+# ── 车型档位（不是车号！）─────────────────────────────────────
+# 填法：24 或 25
+#   24 → EPRobotV2.2 + JUDGE_ID=2
+#   25 → EPRobotV2.3 + JUDGE_ID=1   ← 现行两台车都是 25
+# 注意：这是"车型/裁判档位"，不是"第几号车"，见 docs/竞赛笔记.md §2.1
+# 取值：24 | 25（其它值会被车上启动脚本拒绝）
 CAR_ID="${CAR_ID:-25}"
 
-# 地图目录
+# ── 地图与定位 ────────────────────────────────────────────────
+# 填法：车上存地图的目录（car22 实际是 /home/keyuan22/maps，但有软链 /home/ubuntu/maps）
 MAPS_DIR="${MAPS_DIR:-/home/ubuntu/maps}"
 
-# 必须和车上所有 systemd unit 一致，否则 iscc 起的进程看不见车上节点
+# 定位后端：amcl | cartographer
+#   本车用 amcl（nav2_bringup.launch.py 的默认）；cartographer 的 unit 是 disabled
+LOCALIZATION="${LOCALIZATION:-amcl}"
+
+# 具体地图名（不含 .yaml/.pgm 后缀），注释掉则用 launch 里的默认值
+#   car22 → iscc_3
+# MAP_FILE="${MAP_FILE:-iscc_3}"
+
+# ── DDS ──────────────────────────────────────────────────────
+# 填法：必须与车上**所有** systemd unit 的 Environment=ROS_DOMAIN_ID 一致
+#   现行两台车都是 1（多车同网时新车用 2，见竞赛笔记 §18.4）
+# 取值：0-232 整数
+# 错的后果：iscc 起的 ros2 launch 落在另一个 domain，看不见车上节点（表现为"话题都没数据"）
 ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-1}"
 
-# 可选：ROS 2 发行版与工作空间
+# ── 裁判机（可选，现场覆盖用）────────────────────────────────
+# 填法：裁判软件的机器 IP 与端口；不填则用车上 pharmacy.yaml 里的值
+# 现状：车上写的是 10.211.121.38，实际裁判机常是 10.211.121.222 → **现场必改**
+# JUDGE_HOST="${JUDGE_HOST:-10.211.121.222}"
+# JUDGE_PORT="${JUDGE_PORT:-8888}"
+
+# ── ROS 2 环境（可选，一般不用改）────────────────────────────
 # ROS2_DISTRO="${ROS2_DISTRO:-lyrical}"
 # ROS2_WS_SETUP="${ROS2_WS_SETUP:-/opt/eprobot_ws/install/setup.bash}"

@@ -24,3 +24,14 @@ __pycache__/
 
 # 车上音频的中间备份（1.5x / 1.0x 之类），体积大且可再生成
 */audio/competition.pre_*/
+# 更多凭据形态（2026-11-13 加固）
+*.p12
+*.pfx
+*.kdbx
+id_ed25519*
+id_ecdsa*
+.env
+.env.*
+!.env.example
+.secrets/
+*.secret
