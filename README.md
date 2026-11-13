@@ -19,33 +19,57 @@
 
 ---
 
+## 新人从这里开始（30 秒）
+
+1. **先读** [`docs/竞赛笔记导读.md`](docs/竞赛笔记导读.md) —— 按学习路径跳读，**不要从头啃 3100 行**。
+2. **想复现一辆车** → [`docs/新车部署手册.md`](docs/新车部署手册.md)（详细打勾清单见 `docs/最小可复现清单.md`，待建）。
+3. **想改代码 / 调参** → [`cars/car22/src/README.md`](cars/car22/src/README.md) + [`docs/竞赛笔记.md`](docs/竞赛笔记.md) §22；
+   先确认"能不能改"：[`docs/学弟上手路径.md`](docs/学弟上手路径.md) §4（任务层只有二进制）。
+
+> 三条路径（看原理 / 复现车 / 改任务）的入口表在 [`docs/学弟上手路径.md`](docs/学弟上手路径.md) §0。
+> 仓库哪里乱、还缺什么，看 [`docs/仓库结构诊断.md`](docs/仓库结构诊断.md)。
+
+---
+
 ## 目录
 
 ```
 README.md                   ← 你在这里
 NOTICE.md                   ← 第三方/厂商材料声明
-.gitattributes              ← 保证 Linux 上还原成 LF、二进制不被改
+LICENSE / LICENSE-DOCS      ← 许可（待建：脚本 MIT / 文档 CC BY-SA 4.0）
+SECRETS.md                  ← 凭据索取流程（待建）
+.gitattributes / .gitignore ← 保证 LF、挡住敏感文件
+
 docs/
-  竞赛笔记.md               ← ★ 主文档：从零 ROS 到独立跑一圈（3000+ 行）
-  新车部署手册.md            ← ★ 把本仓库铺到一台新车上的完整步骤
-  仓库结构与维护.md          ← 目录约定、怎么从车上更新、什么没入库
-  附录-文件清单.md            ← ★ 自动生成：每一个文件 + 大小（702 项，由 tools/gen_manifest.sh 产出）
+  竞赛笔记导读.md           ← ★ 先读：23 章索引 + 八段学习路径
+  学弟上手路径.md           ← ★ 三条路径 + 能改/不能改边界
+  竞赛笔记.md               ← ★ 主文档 3100+ 行：从零 ROS 到独立跑一圈
+  新车部署手册.md           ← 把本仓库铺到一台新车上的步骤
+  仓库结构与维护.md         ← 目录约定 / 更新纪律 / 迁移记录
+  仓库结构诊断.md           ← 14 个已知问题与处置
+  附录-文件清单.md          ← 自动生成：702 个文件逐个列大小
+  （待建）依赖清单 · 航点标定手册 · unit依赖关系 · 版本矩阵
+          最小可复现清单 · 故障恢复手册 · 外部材料与索取清单 · adr/
+
 cars/
   car22/                    ← 现在这台车（10.211.121.22 / EPRobot2）
-    README.md               ← 本车档案（硬件/服务/话题/参数/已知问题）
+    README.md               ← 本车档案（含『原理索引』表 → 笔记章节）
     rootfs/                 ← 直接可拷到 / 的成品：install 产物、配置、unit、脚本、模型
-    src/                    ← 需要在新车 colcon build 的源码（含 ROS 2 底盘驱动）
+    src/                    ← 源码，README 索引 6 个包（Python 参考实现 + 4 C++ + relay）
     firmware/
       chassis_mcu/          ← ★ STM32 底盘固件源码（两个版本）+ 原理图 + 协议表
-      README.md             ← 固件与 ROS 2 的关系、关键参数、烧录/核对方法
-  car21/                    ← ★ 初代机（10.211.121.21 / EPRobot1）· 2026-11-13 从 SD 卡只读取件
-    README.md               ← 档案：账号/AP 热点实现/与 car22 的六处硬差异/缺源码的结论
-    rootfs/                 ← 成品：pharmacy_pkg、nav 配置、hostapd+dnsmasq、unit、WiFi 切换脚本
-    src/                    ← 需要 colcon build 的 5 个包
+      README.md             ← 固件四层划分、关键参数、烧录/核对方法
+  car21/                    ← ★ 初代机（10.211.121.21 / EPRobot1）· 从 SD 卡只读取件
+    README.md               ← 档案：账号/AP 热点实现/与 car22 的六处硬差异
+    rootfs/ src/            ← 成品与源码
     export_from_sd.sh       ← 从 .21 的卡再导出一次（只读 + trap 自动 umount）
+
 install/
-  apply_to_car22.sh         ← 一键铺到新车（默认 dry-run，需 --yes 才写）
+  apply_to_car22.sh         ← 一键铺到新车（默认 dry-run，需 --yes 才写；拒绝对 .22 直接铺）
+
 tools/
+  selfcheck.sh              ← ★ 仓库自检（链接/二进制 SHA/unit 语法/凭据/命名/红线）
+  gen_manifest.sh           ← 生成 docs/附录-文件清单.md
   wsl/                      ← ★ WSL 快捷指令全套（iscc / car* / rviz-car / ros_env.sh）
   host-iscc/                ← 主机侧（WSL）iscc 工具箱 + 配置模板
   probes/                   ← 只读诊断脚本（网络/相机/IMU/CPU）
@@ -86,9 +110,10 @@ iscc start                 # ★ 车会动
 | **车上成品层** | 车的 `/opt` `/home` `/etc` | `eprobot-*` systemd unit | 底盘/IMU/雷达/相机/Nav2/识别/裁判，见 `cars/car22/rootfs/` |
 | **下位机层** | STM32 底盘板 | 串口 `0x5A` 协议 | 运动学 + PID + 舵机，见 `cars/car22/firmware/` |
 
-> ⚠️ 三个"固件"不是一回事：
-> - **下位机固件**（`firmware/chassis_mcu/`）= STM32 上的 RT-Thread 工程，管电机/舵机/PID。**它与 ROS 1/ROS 2 都无关**，只认串口字节流。
-> - **ROS 2 底盘驱动**（`src/opt_eprobot_ws_src/eprobot_base/`）= 树莓派上跑的 C++ 节点，把 `/cmd_vel` 翻译成串口帧、把回包翻译成 `/odom` `/imu/data`。
+> ⚠️ **四个"固件"不是一回事**（详见 [`cars/car22/firmware/README.md`](cars/car22/firmware/README.md)）：
+> - **下位机固件**（`firmware/chassis_mcu/`）= STM32 上的 RT-Thread 工程，管电机/舵机/PID。**与 ROS 1/ROS 2 都无关**，只认串口字节流。
+> - **ROS 2 驱动 · Python 版**（`src/opt_eprobot_ws_src/eprobot_base/`）= **参考实现**，含完整测试；C++ 版就是照它写的。
+> - **ROS 2 驱动 · C++ 版**（`rootfs/opt/eprobot_ws/install/eprobot_base_cpp/`）= **车上实际在跑的那个**，只有头文件 + 二进制，`.cpp` 缺失。
 > - **任务层**（`rootfs/.../lib/pharmacy_pkg/`）= 比赛逻辑，只有二进制。
 
 ---
