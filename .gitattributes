@@ -14,6 +14,10 @@
 *.7z    -text
 *.pdf   -text
 *.xlsx  -text
+
+# 出厂原件：GBK 编码 + CRLF，保持字节原样，禁止任何换行/编码转换
+cars/car24-ros1/factory/vendor_driver/art_racecar.py.orig590        -text
+cars/car24-ros1/factory/vendor_driver/art_racecar.py.orig590_planb  -text
 *.tar.gz -text
 
 # 编译产物/ELF 可执行文件（无扩展名，靠 auto 识别为二进制）

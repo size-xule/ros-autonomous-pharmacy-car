@@ -40,6 +40,9 @@ cars/
   car21/                    ← 预留位（初代机 10.211.121.21，卡被拔走）
     README.md               ← 占位说明 + 从 SD 卡导出的方法
     export_from_sd.sh       ← 在 .22 上跑，把 .21 的卡内容整理成同样的结构
+  car24-ros1/               ← ★ ROS 2 升级前的出厂状态索引（Ubuntu 18.04 / ROS 1）
+    README.md               ← 出厂镜像名、厂商 PDF 要点、5 个 gitlink 缺口、取件命令
+    factory/                ← 从 git 抽出的出厂原件：厂商 demo + 厂商驱动 + 590 行原版驱动
 install/
   apply_to_car22.sh         ← 一键铺到新车（默认 dry-run，需 --yes 才写）
 tools/
