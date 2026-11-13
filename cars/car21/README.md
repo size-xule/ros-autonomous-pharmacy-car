@@ -77,14 +77,23 @@
 
 ---
 
-## 4. 两条 `.22` 上没有的性能优化（值得抄过去）
+## 4. 三条 `.22` 上没有（或实现不同）的优化
 
-| 服务 | 做什么 | 为什么 |
+| 项 | 做什么 | 为什么 |
 |---|---|---|
 | `cpu-performance.service` | `echo performance > /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor` | **锁 CPU 性能模式**，减少 ROS 2 控制环抖动（默认 `ondemand` 会降频到 600 MHz） |
 | `wifi-powersave-off.service` | `iw dev wlan0 set power_save off` | 关 WiFi 省电，**降低 DDS 延迟与丢包** |
+| **systemd drop-in** | 见下表 | `.22` 把 `Environment=` 直接写在每个 unit 里；`.21` 用 **drop-in** 叠加，改起来不用动原 unit |
 
-> 这两条比"关 unattended-upgrades"更直接。`.22` 上没有，建议照搬到 `.22`（属于改系统配置，先备份 unit）。
+**`.21` 的 drop-in（`/etc/systemd/system/<unit>.service.d/`）**
+
+| 文件 | 内容 | 作用 |
+|---|---|---|
+| `eprobot-{base,imu,nav}.service.d/20-dds-udp.conf`、`lslidar.service.d/20-dds-udp.conf` | `Environment=FASTDDS_BUILTIN_TRANSPORTS=UDPv4` | **根治 `Failed init_port fastdds_port70xx`**（避开 SHM，见竞赛笔记 §6.7） |
+| `eprobot-nav.service.d/30-log-level-warn.conf`、`lslidar.service.d/30-log-level-warn.conf` | `Environment=RCUTILS_DEFAULT_LOGGER_DEFAULT_LEVEL=WARN` | **降日志级别**，减少 journal 写入（SD 卡 IO 与 CPU 都省） |
+| `dnsmasq.service.d/iscc-ap.conf` | `After=` / `Wants=iscc-hotspot.service` | 保证 dnsmasq 在热点起来之后再起 |
+
+> 这三条比"关 unattended-upgrades"更直接，且**不需要改原 unit**，建议照搬到 `.22`。
 
 ---
 
