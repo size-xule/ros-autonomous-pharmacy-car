@@ -3,6 +3,18 @@
 > 这台是**当前在跑的车**。本目录是它的"可恢复镜像"。
 > 详细原理见 [`../../docs/竞赛笔记.md`](../../docs/竞赛笔记.md)；部署步骤见 [`../../docs/新车部署手册.md`](../../docs/新车部署手册.md)。
 
+**原理索引（本文件 ↔ 笔记章节）**
+
+| 本文件的节 | 想搞懂背景，去读 |
+|---|---|
+| §1 身份卡 / §2 路径对照 | [`竞赛笔记.md` §2 认车](../../docs/竞赛笔记.md)、[`§19.1` 两车对照](../../docs/竞赛笔记.md) |
+| §3 服务表（15 unit） | [`§6.1` systemd 才是启动器](../../docs/竞赛笔记.md)；`docs/unit依赖关系.md`（待建） |
+| §4 相机链 | [`§6.5` 相机链](../../docs/竞赛笔记.md)（六坑全在这） |
+| §5 关键参数 | [`§6.4` Nav2 参数](../../docs/竞赛笔记.md)、[`§22` 调参决策表](../../docs/竞赛笔记.md) |
+| §6 话题与节点 | [`§4.2` 七个概念](../../docs/竞赛笔记.md) |
+| §7 起车/收车 | [`§12` 一天清单](../../docs/竞赛笔记.md) |
+| §8 已知问题 | [`§17.3` 未解决清单](../../docs/竞赛笔记.md) |
+
 ---
 
 ## 1. 身份卡
@@ -33,6 +45,7 @@
 | 本仓库 | 车上 |
 |---|---|
 | `rootfs/opt/eprobot_ws/install/pharmacy_pkg/` | `/opt/eprobot_ws/install/pharmacy_pkg/` |
+| `rootfs/opt/eprobot_ws/install/eprobot_base_cpp/` | `/opt/eprobot_ws/install/eprobot_base_cpp/`（**实际在跑的 C++ 底盘驱动**，源码缺失） |
 | `rootfs/opt/oni2-orbbec/` | `/opt/oni2-orbbec/` |
 | `rootfs/home/keyuan22/eprobot_navigation/` | `/home/keyuan22/eprobot_navigation/` |
 | `rootfs/home/keyuan22/camera_shim/` | `/home/keyuan22/camera_shim/` |
@@ -193,4 +206,4 @@ iscc stop             # 只停任务
 | 5 | 跨机 DDS 端点匹配不稳 | 远程 RViz 常空白，**判车况以车上为准** |
 | 6 | `f1_mission_node` **无源码** | 只能改 YAML/限速/Nav2 参数 |
 | 7 | OCR 运行时 `runtime_arm64` 未入库（276 MB） | 按 `requirements.txt` 重装 |
-| 8 | `wheelbase` 上位机 0.160 vs 固件 0.1445（差 9.7%） | 未澄清，需实测转弯半径 |
+| 8 | **C++ 底盘驱动源码缺失**：`eprobot_base_cpp` 只有 6 个头文件 + 二进制，`.cpp` 全盘搜不到 | 改实现只能按 `src/.../eprobot_base/`（Python 参考实现）重写；参数在 `install/eprobot_base_cpp/.../base.yaml`（`axle_length 0.171` / `kp 500/100/0`） |

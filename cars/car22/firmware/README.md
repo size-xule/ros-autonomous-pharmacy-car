@@ -14,6 +14,8 @@
 > *"Wire protocol v2.1, mirrored one-for-one from PROTOCOL.md and the proven Python implementation in ../eprobot_base/eprobot_base/protocol.py"*），
 > 所以 **② 的源码就是 ③ 的可读替代品**，改协议先看 Python 版。
 
+**📖 原理章节**：协议逐字节解读见 [`竞赛笔记.md` §5.3](../../../docs/竞赛笔记.md)；odom 积分公式见 [`§5.4`](../../../docs/竞赛笔记.md)；IMU 选型与更换见 [`§21`](../../../docs/竞赛笔记.md)；参数值的来历见 [`§5.8` / `§22`](../../../docs/竞赛笔记.md)。
+
 ---
 
 ## 1. 本目录内容
