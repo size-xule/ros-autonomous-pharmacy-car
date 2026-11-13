@@ -6,11 +6,15 @@
 #   bash tools/gen_manifest.sh /tmp/x.md    # 写到指定路径（selfcheck 用它做新旧对比）
 #
 # 说明：
-#   * 以 git ls-files 为准，不扫磁盘（避免把 __pycache__ / .pytest_cache 算进去）
+#   * 以 git ls-files（core.quotepath=false）为准，不扫磁盘（避免把 __pycache__ / .pytest_cache 算进去）
 #   * 只读仓库，不联网
 #   * 排除清单自身，保证重复生成结果一致
 #   * 按区域分组，每区一张『大小 + 路径』列表，便于 grep
 set -euo pipefail
+# git ls-files 默认对非 ASCII 文件名做八进制转义加引号（core.quotepath），
+# 会让 `[ -e "$f" ]` 永远为假（本仓库有一堆中文文件名），故统一走这个包装。
+gls() { git -c core.quotepath=false ls-files "$@"; }
+
 
 REPO="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
@@ -39,7 +43,7 @@ AREAS=(
 )
 
 # 排除清单自身：否则它会列出自己的大小，内容每次生成都变，永远判定为「过期」
-files=$(git ls-files | grep -v '^docs/附录-文件清单\.md$')
+files=$(gls | grep -v '^docs/附录-文件清单\.md$')
 total=$(printf '%s\n' "$files" | grep -c . || true)
 totalb=$(printf '%s\n' "$files" | while IFS= read -r f; do
   [ -f "$f" ] && stat -c %s "$f" 2>/dev/null || echo 0
@@ -55,7 +59,7 @@ fmt() { # $1 = 字节
 {
   echo "# 文件清单（自动生成）"
   echo
-  echo "> 由 \`tools/gen_manifest.sh\` 以 \`git ls-files\` 生成，列出**每一个受管文件**及其大小。"
+  echo "> 由 \`tools/gen_manifest.sh\` 以 \`gls\` 生成，列出**每一个受管文件**及其大小。"
   echo "> \`__pycache__\`、\`.pytest_cache\` 等本地缓存在 \`.gitignore\` 里，不在本清单内。"
   echo "> **不要手改**——重跑脚本即可。"
   echo

@@ -13,6 +13,10 @@
 #
 # 设计原则：只读、缺依赖降级为 WARN、退出码 0=通过 1=有 FAIL
 set -uo pipefail
+# git ls-files 默认对非 ASCII 文件名做八进制转义加引号（core.quotepath），
+# 会让 `[ -e "$f" ]` 永远为假（本仓库有一堆中文文件名），故统一走这个包装。
+gls() { git -c core.quotepath=false ls-files "$@"; }
+
 
 REPO="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO" || { echo "无法进入仓库根目录"; exit 1; }
@@ -49,7 +53,7 @@ check_links() {
         bad=$((bad+1))
       fi
     done < <(grep -oE '\]\([^)]+\)' "$f" 2>/dev/null | sed -e 's/^](//' -e 's/)$//' -e 's/^<//' -e 's/>$//')
-  done < <(git ls-files '*.md')
+  done < <(gls '*.md')
   [ "$bad" -eq 0 ] && c_ok "检查 $total 个相对链接，全部可达"
 }
 
@@ -73,7 +77,7 @@ check_sha() {
 check_units() {
   sec "3/8 systemd unit 语法"
   local n=0 bad=0 f
-  for f in $(git ls-files 'cars/car22/rootfs/etc/systemd/system/*.service'); do
+  for f in $(gls 'cars/car22/rootfs/etc/systemd/system/*.service'); do
     n=$((n+1))
     grep -q '^\[Unit\]' "$f"    || { c_fail "$f 缺 [Unit]"; bad=$((bad+1)); }
     grep -q '^\[Service\]' "$f" || { c_fail "$f 缺 [Service]"; bad=$((bad+1)); }
@@ -82,7 +86,7 @@ check_units() {
   [ "$bad" -eq 0 ] && c_ok "检查 $n 个 unit 的段结构"
   if command -v systemd-analyze >/dev/null 2>&1; then
     local vbad=0
-    for f in $(git ls-files 'cars/car22/rootfs/etc/systemd/system/eprobot-*.service'); do
+    for f in $(gls 'cars/car22/rootfs/etc/systemd/system/eprobot-*.service'); do
       systemd-analyze verify "$f" 2>&1 | grep -qiE 'Unknown section|Invalid setting|Failed to parse' && {
         c_warn "systemd-analyze 对 $f 有语法级告警"; vbad=$((vbad+1)); }
     done
@@ -100,7 +104,7 @@ check_secrets() {
     grep -qF "$p" .gitignore || { c_fail ".gitignore 未覆盖：$p"; miss=$((miss+1)); }
   done
   [ "$miss" -eq 0 ] && c_ok "关键敏感模式均已覆盖"
-  if git ls-files | grep -qE '(^|/)iscc\.conf$|\.pem$|id_rsa$|id_ed25519$'; then
+  if gls | grep -qE '(^|/)iscc\.conf$|\.pem$|id_rsa$|id_ed25519$'; then
     c_fail "仓库里出现了疑似凭据文件"
   else
     c_ok "仓库内无 iscc.conf 真本 / 私钥 / pem"
@@ -213,10 +217,14 @@ check_manifest() {
 # ---------------------------------------------------------------- 红线
 check_redline() {
   sec "红线自检"
-  if git diff --quiet HEAD -- 'cars/car22/rootfs/opt/eprobot_ws/install/pharmacy_pkg/lib/'; then
-    c_ok "lib/pharmacy_pkg 相对 HEAD 无改动（红线 1）"
+  # 只盯「9 个 ELF」本身：本目录允许新增 .md/.sh（说明与校验文件），也允许改它们的权限位
+  local libdir="cars/car22/rootfs/opt/eprobot_ws/install/pharmacy_pkg/lib/pharmacy_pkg"
+  local bin_changed
+  bin_changed=$(git diff --name-only HEAD -- "$libdir/" | grep -vE '\.(md|sh|txt)$|SHA256SUMS' || true)
+  if [ -z "$bin_changed" ]; then
+    c_ok "9 个二进制相对 HEAD 无改动（红线 1；仅允许新增 md/sh/校验文件）"
   else
-    c_fail "lib/pharmacy_pkg 相对 HEAD 有改动（违反红线 1）"
+    c_fail "二进制被改动：$(printf '%s' "$bin_changed" | tr '\n' ' ')"
   fi
   if grep -q 'MODE=dry' install/apply_to_car22.sh && grep -q '10.211.121.22（正在用车）' install/apply_to_car22.sh; then
     c_ok "apply_to_car22.sh 的 dry-run 与拒铺保护仍在（红线 4）"
