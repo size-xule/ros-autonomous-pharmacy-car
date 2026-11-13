@@ -1,0 +1,47 @@
+MIT License
+
+Copyright (c) 2026 cxy, xl (宁波大学科学技术学院 / Ningbo University of Technology, Cixi)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+## 适用范围（重要）
+
+本 MIT 许可**只覆盖队伍原创的代码与脚本**（下称"本软件"）：
+
+| 覆盖 | 路径 |
+|---|---|
+| ✅ 工具与脚本 | `tools/**`、`install/apply_to_car22.sh`、`cars/car21/export_from_sd.sh`、`cars/car22/rootfs/usr/local/bin/iscc-*` |
+| ✅ 队伍写的代码 | `cars/car22/src/opt_eprobot_ws_src/eprobot_base/**`（Python 驱动 + 测试）、`cars/car22/src/relay_ws/mono8_relay/**`、`cars/car22/rootfs/home/keyuan22/{camera_shim,board2_ocr,nav_tune_web}/**` 中的 `.py`、`eprobot_navigation/scripts/**` |
+| ✅ 配置取值 | `cars/*/rootfs/etc/**` 中队伍新增/修改的 unit 与 netplan、`nav2_params.yaml` / `mission_waypoints.yaml` / `pharmacy.yaml` 的**数值** |
+| ❌ **不覆盖** | 见下方"例外" |
+
+### 例外（不受本 MIT 许可约束）
+
+1. **`lslidar_driver` / `lslidar_msgs`** —— 镭神智能，**GPL-3.0**（copyleft）。原样保留其许可；
+   分发二进制时需按 GPL-3.0 提供源码。
+2. **`serial`**（jinmenglei）、**`yesense_interface` / `yesense_std_ros2`**（YESENSE）—— Apache-2.0，各自保留。
+3. **EPRobot 厂商材料**：STM32 固件源码（`.7z`）、原理图、协议表、**任务层 9 个二进制**、
+   `pharmacy_pkg` 的 launch/config/include —— 版权归 EPRobot（北京塔洛斯科技），**未授权再许可**。
+4. **Orbbec OpenNI2 SDK**（`cars/car22/rootfs/opt/oni2-orbbec/`）—— 奥比中光，受其 SDK 许可约束，禁止单独再分发。
+5. **PP-OCRv6 模型**（`board2_ocr/models/`）—— 百度 PaddleOCR，Apache-2.0。
+6. **文档**（`docs/**`、各 `README.md`）—— 使用 [`LICENSE-DOCS`](LICENSE-DOCS)（CC BY-SA 4.0），**不是** MIT。
+
+> 逐项归属与证据见 [`NOTICE.md`](NOTICE.md)。

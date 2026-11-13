@@ -1,0 +1,62 @@
+# 文档许可：CC BY-SA 4.0
+
+本仓库中**由队伍原创的文档**采用
+**Creative Commons Attribution-ShareAlike 4.0 International（CC BY-SA 4.0）** 许可。
+
+许可全文（法律文本）：<https://creativecommons.org/licenses/by-sa/4.0/legalcode>
+人类可读摘要：<https://creativecommons.org/licenses/by-sa/4.0/>
+
+---
+
+## 覆盖范围
+
+| 覆盖 | 路径 |
+|---|---|
+| ✅ | `docs/**/*.md`（竞赛笔记、导读、部署手册、依赖清单、标定手册、unit 依赖、版本矩阵、ADR、附录清单…） |
+| ✅ | 根 `README.md`、`NOTICE.md`、`SECRETS.md`、`LICENSE`（本说明性文件） |
+| ✅ | 队伍新增的各目录 `README.md`（`cars/car22/src/README.md`、`tools/probes/README.md`、`udev/rules.d/README.md`、`board2_ocr/runtime/README.md`、`firmware/README.md` 等） |
+| ❌ | **厂商自带**的 README（如 `lslidar_ros2/README.md`、`pharmacy_pkg/share/pharmacy_pkg/README.md`）—— 归各自权利人 |
+| ❌ | 任何代码/脚本（用根目录 [`LICENSE`](LICENSE)，MIT） |
+
+---
+
+## 你可以做什么
+
+- **复制、转载、翻译、改写**这些文档；
+- **用于教学、比赛、培训**（含商业培训，CC BY-SA 允许）；
+- **再发布修改版**。
+
+## 你必须做到
+
+1. **署名（BY）**：注明来源与作者，并给出许可链接；
+2. **相同方式共享（SA）**：如果你修改了文档并**公开分发**，修改版必须**同样使用 CC BY-SA 4.0**（不能改成 MIT/专有）；
+3. **保留声明**：不要删除原文中的版权与免责声明；
+4. **不附加限制**：不能给他人施加额外的法律/技术限制。
+
+> 注意 SA 只在**公开分发修改版**时触发。内部使用、自己看、比赛现场打印都不受影响。
+
+---
+
+## 建议的署名格式
+
+```
+本文档改编自 ros-autonomous-pharmacy-car 的《竞赛笔记》
+作者：cxy、xl（宁波大学科学技术学院），2026
+来源：https://github.com/size-xule/ros-autonomous-pharmacy-car
+许可：CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/)
+修改说明：<如无修改可省略>
+```
+
+---
+
+## 免责
+
+文档按"**现状**"提供，不作任何明示或暗示的担保。按文档操作导致的硬件损坏、比赛失利等后果，
+作者不承担责任。**涉及硬件（尤其下位机固件烧录、舵机限位）的操作务必先备份、先小范围验证。**
+
+---
+
+## 相关
+
+- 代码/脚本许可：[`LICENSE`](LICENSE)（MIT）
+- 第三方材料归属：[`NOTICE.md`](NOTICE.md)（含 GPL-3.0 的 `lslidar_driver`）
