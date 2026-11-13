@@ -1,0 +1,702 @@
+amcl:
+  ros__parameters:
+    alpha1: 0.2
+    alpha2: 0.2
+    alpha3: 0.2
+    alpha4: 0.2
+    alpha5: 0.2
+    base_frame_id: base_link
+    beam_skip_distance: 0.5
+    beam_skip_error_threshold: 0.9
+    beam_skip_threshold: 0.3
+    do_beamskip: false
+    global_frame_id: map
+    lambda_short: 0.1
+    laser_likelihood_max_dist: 2.0
+    laser_max_range: 10.0
+    laser_min_range: 0.02
+    laser_model_type: likelihood_field
+    max_beams: 60
+    max_particles: 2000
+    min_particles: 500
+    odom_frame_id: odom
+    pf_err: 0.05
+    pf_z: 0.99
+    recovery_alpha_fast: 0.0
+    recovery_alpha_slow: 0.0
+    random_seed: -1
+    resample_interval: 1
+    robot_model_type: nav2_amcl::DifferentialMotionModel
+    save_pose_rate: 0.5
+    sigma_hit: 0.2
+    tf_broadcast: true
+    transform_tolerance: 0.5
+    introspection_mode: disabled
+    # Filter update thresholds, not a timer: AMCL re-integrates whenever the
+    # robot has moved 0.05 m or turned 0.05 rad since the last update.  These
+    # were relaxed to 0.10 to save Pi 4 CPU, then pulled back to 0.05 because
+    # the coarser gate let map->odom drift while the car was weaving, which is
+    # what the planner saw as a heartbeat of pose jumps between cycles.
+    update_min_a: 0.05
+    update_min_d: 0.05
+    z_hit: 0.5
+    z_max: 0.05
+    z_rand: 0.5
+    z_short: 0.05
+    scan_topic: scan
+    set_initial_pose: true
+    initial_pose:
+      x: -0.088
+      y: 0.083
+      z: 0.0
+      yaw: 0.0
+bt_navigator:
+  ros__parameters:
+    global_frame: map
+    robot_base_frame: base_link
+    odom_topic: odom
+    bt_loop_duration: 10
+    filter_duration: 0.3
+    default_server_timeout: 200
+    default_cancel_timeout: 50
+    wait_for_service_timeout: 1000
+    introspection_mode: disabled
+    navigators:
+    - navigate_to_pose
+    - navigate_through_poses
+    navigate_to_pose:
+      plugin: nav2_bt_navigator::NavigateToPoseNavigator
+      enable_groot_monitoring: false
+      groot_server_port: 1667
+      search_window: 2.0
+    navigate_through_poses:
+      plugin: nav2_bt_navigator::NavigateThroughPosesNavigator
+      enable_groot_monitoring: false
+      groot_server_port: 1669
+      search_window: 2.0
+    bt_search_directories:
+    - /opt/ros/lyrical/share/nav2_bt_navigator/behavior_trees
+    error_code_name_prefixes:
+    - assisted_teleop
+    - backup
+    - compute_path
+    - dock_robot
+    - drive_on_heading
+    - follow_object
+    - follow_path
+    - nav_thru_poses
+    - nav_to_pose
+    - route
+    - spin
+    - smoother
+    - undock_robot
+    - wait
+    default_nav_to_pose_bt_xml: /home/ubuntu/eprobot_navigation/config/navigate_to_pose_no_spin.xml
+controller_server:
+  ros__parameters:
+    # 10 Hz while MPPI is the controller: 1000 samples x 30 steps at 10 Hz is
+    # the Pi 4 budget and MPPI's model_dt (0.1) must be >= 1/frequency.
+    # The RPP profile ran at 20 Hz; keep that in mind if you switch back.
+    controller_frequency: 10.0
+    costmap_update_timeout: 0.3
+    min_x_velocity_threshold: 0.001
+    min_y_velocity_threshold: 0.001
+    min_theta_velocity_threshold: 0.001
+    # Seconds of controller failure tolerated before the task aborts.  0.3 s
+    # is only three cycles at 10 Hz, so one transient "collision ahead" from
+    # the carrot sweep killed an otherwise healthy path.  1.0 s still ends a
+    # genuinely blocked run but rides out a single bad costmap update.
+    failure_tolerance: 1.0
+    progress_checker_plugins:
+    - progress_checker
+    goal_checker_plugins:
+    - general_goal_checker
+    # Selected per navigation leg by goal_checker_bridge (see scripts/), which
+    # republishes the BT's goal_checker_selector when nav_pharmacy announces a
+    # target listed in its free_yaw_targets.  Every other leg keeps the strict
+    # checker below.
+    - free_yaw_goal_checker
+    controller_plugins:
+    - FollowPath
+    path_handler_plugins:
+    - PathHandler
+    use_realtime_priority: false
+    speed_limit_topic: speed_limit
+    progress_checker:
+      plugin: nav2_controller::SimpleProgressChecker
+      # Keep this deliberately permissive: the tight C/B/A legs can pause or
+      # creep while the controller resolves a short manoeuvre.  A 0.30 m
+      # displacement within 10 s avoids interpreting a slow, valid approach as
+      # a stuck chassis.
+      required_movement_radius: 0.30
+      movement_time_allowance: 10.0
+    general_goal_checker:
+      stateful: true
+      plugin: nav2_controller::AdaptiveToleranceGoalChecker
+      # Tightened for the competition windows.  The coarse tier only applies
+      # after the car has stopped, or stopped improving, for 4 cycles.
+      fine_xy_goal_tolerance: 0.15
+      coarse_xy_goal_tolerance: 0.22
+      xy_goal_tolerance_buffer: 0.02
+      # An Ackermann chassis cannot rotate in place and the chassis rejects
+      # vx=0 with wz!=0, so a tight final heading is unreachable: the
+      # controller inched forward/back at +-0.15 m/s for 20 s at every goal.
+      yaw_goal_tolerance: 0.35
+      path_length_tolerance: 1.0
+      trans_stopped_velocity: 0.05
+      rot_stopped_velocity: 0.10
+      required_stagnation_cycles: 4
+    free_yaw_goal_checker:
+      # Position only.  Unused by default: goal_checker_bridge's
+      # free_yaw_targets is empty, so A keeps the same 0.35 rad heading check
+      # as B and C.  Kept for a leg where heading is genuinely unreachable.
+      # The C -> A leg is a 0.95 m S-curve through a 0.48 m lattice radius;
+      # RPP tracks it 0.10 m inside and reaches A up to 0.79 rad off the
+      # 1.5708 goal heading, so the strict checker used to demand a heading
+      # correction that SmacHybrid could only answer with a 0.22 m
+      # three-point turn -- the forward/reverse twitch at A.  If that twitch
+      # returns, add "A" to free_yaw_targets instead of loosening the global
+      # 0.35 rad tolerance.
+      # 3.15 rad is the widest meaningful value (the checker normalises the
+      # error to [-pi, pi]), i.e. yaw is not checked at all while xy still is.
+      # Same plugin class as general_goal_checker so the parameter set that is
+      # already exercised here does not change; only yaw becomes a no-op.
+      plugin: nav2_controller::AdaptiveToleranceGoalChecker
+      stateful: true
+      fine_xy_goal_tolerance: 0.15
+      coarse_xy_goal_tolerance: 0.22
+      xy_goal_tolerance_buffer: 0.02
+      yaw_goal_tolerance: 3.15
+      path_length_tolerance: 1.0
+      trans_stopped_velocity: 0.05
+      rot_stopped_velocity: 0.10
+      required_stagnation_cycles: 4
+    PathHandler:
+      plugin: nav2_controller::FeasiblePathHandler
+      prune_distance: 2.0
+      # SmacHybrid is configured with Reeds-Shepp and RPP may reverse, so do
+      # not let the local path span a direction inversion.  Splitting at the
+      # cusp keeps the lookahead point in front of the direction of travel.
+      enforce_path_inversion: true
+      enforce_path_rotation: false
+      inversion_xy_tolerance: 0.2
+      inversion_yaw_tolerance: 0.4
+      minimum_rotation_angle: 0.785
+      reject_unit_path: false
+    FollowPath:
+      plugin: nav2_mppi_controller::MPPIController
+      # ---- MPPI, migrated 2026-10-27 from the RPP profile that was live ----
+      # 1.2 m/s top speed, 0.05 m/s reverse floor, reverse allowed
+      # (allow_reversing: true -> vx_min < 0).  MPPI consumes the limits as
+      # sampling ranges instead of one commanded velocity.
+      # CPU budget on the Pi 4: 1000 samples x 30 steps x 10 Hz = 300 k
+      # rollouts/s, the point that fits (the stock 2000 x 56 @ 10 Hz is 4x and
+      # overruns).  controller_frequency is therefore 10 Hz while MPPI is the
+      # controller; model_dt must be >= 1/controller_frequency or MPPI throws
+      # at configure time.  If the CPU ever keeps up, 20 Hz needs model_dt 0.05
+      # and a smaller batch.
+      time_steps: 30
+      model_dt: 0.1
+      batch_size: 1000
+      iteration_count: 1
+      # Lower temperature = pick the best (often fastest) rollout instead
+      # of averaging over the sample cloud.  0.25 still averaged the speed
+      # away, so 0.15 commits to the fastest low-cost sample.
+      temperature: 0.15
+      # Slightly more discount on far-future cost: commit to speed now.
+      gamma: 0.02
+      # 0.4 spreads the samples over the whole 1.2 m/s range even from rest
+      # (3 sigma reaches the new limit), so full speed is proposed on the
+      # first cycle instead of ramping through the sample distribution.
+      vx_std: 0.4
+      vy_std: 0.0
+      wz_std: 0.5
+      vx_max: 1.2
+      # Reverse deliberately remains at -1.0: the tight points need a real
+      # three-point turn, and a -0.05 floor meant MPPI could only creep
+      # backwards at 5 cm/s (the "small movement" the operator kept seeing).
+      # The driver permits up to max_vx=1.2 and the firmware 1.5 m/s, so keep
+      # reverse at -1.0 instead of increasing it with the forward speed.
+      vx_min: -1.0
+      vy_max: 0.0
+      # Ackermann curvature is wz / vx, so a yaw-rate limit copied from a
+      # differential-drive profile does not mean the same thing here.  At
+      # vx_max 1.2 m/s, wz_max 2.5 gives R = 0.48 m, matching SmacHybrid's
+      # planner radius at full speed.  Tighter arcs are available when MPPI slows down.
+      # when MPPI slows down.  The old 1.6 rad/s allowed only 15.3 deg of the
+      # 32.5 deg full lock at 1.0 m/s, so MPPI could not steer into its own
+      # path and the mission retried the same point.  The chassis driver still
+      # clamps delta at 567 mrad.
+      wz_max: 2.5
+      # Measured on the cart (2026-11-04, onboard bag bag_20261104_132806):
+      # the chassis delivers a sustained 1.31 m/s^2 (0.5 s window, p99) and
+      # at most 1.70 (0.4 s); 0.1->0.9 m/s took 1.66 s, i.e. 0.48 m/s^2 on
+      # average.  ax_max 0.8 sits below the sustained capability on purpose;
+      # MPPI must not plan acceleration the chassis cannot deliver.  ax_min
+      # -2.0 matches the 2026-11-04 23:53 bag (13 commanded stops: 0.9 m/s
+      # -> 0.44 s / 0.19 m, i.e. 2.0 m/s^2 sustained); the previous -3.0
+      # model braked ~8 cm too late at 1.0 m/s.
+      ax_max: 0.8
+      ax_min: -2.0
+      # 1.0 rad/s^2 needed 1.6 s to reach 1.6 rad/s, so most of the 3 s
+      # horizon was spent under-steering and tight arcs lost to wide ones.
+      # 4.5 rad/s^2 reaches 2.5 rad/s in 0.56 s, so tight arcs no longer eat
+      # most of the 3 s horizon.
+      az_max: 4.5
+      transform_tolerance: 0.3
+      visualize: false
+      publish_optimal_trajectory: false
+      regenerate_noises: false
+      open_loop: false
+      motion_model: "ackermann"
+      ackermann:
+        plugin: "mppi::AckermannMotionModel"
+        # axle_length 0.171 m / tan(32.5 deg) = 0.268 m geometrically;
+        # measured full lock is 0.343 m left / 0.368 m right (0.25-0.8 m/s).
+        # The planner stays conservative at 0.48 m, but the controller needs
+        # headroom below it or tracking error is unfixable at low speed: at
+        # 0.25 m/s the old 0.48 m capped wz at 0.52 rad/s -> 19.6 deg, 60 % of
+        # lock, which is what made the final correction look like a twitch.
+        # 0.40 m keeps ~10 % margin over the measured radius.
+        min_turning_r: 0.40
+      critics:
+        [
+          "ConstraintCritic",
+          "CostCritic",
+          "GoalCritic",
+          "GoalAngleCritic",
+          "PathAlignCritic",
+          "PathFollowCritic",
+          "PathAngleCritic",
+          "PreferForwardCritic",
+        ]
+      ConstraintCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 4.0
+      CostCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 3.81
+        near_collision_cost: 253
+        critical_cost: 300.0
+        consider_footprint: false
+        collision_cost: 1000000.0
+        near_goal_distance: 0.5
+        trajectory_point_step: 2
+      GoalCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 6.0
+        threshold_to_consider: 1.4
+      GoalAngleCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 3.0
+        threshold_to_consider: 0.5
+      PreferForwardCritic:
+        enabled: true
+        cost_power: 1
+        # 5.0 (the Nav2 default) outvoted the path critics whenever a
+        # Reeds-Shepp segment reversed, so the planner could emit a cusp that
+        # the controller then refused to drive.  1.0 keeps a mild forward
+        # preference without vetoing reverse.
+        cost_weight: 1.0
+        threshold_to_consider: 0.5
+      PathAlignCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 14.0
+        max_path_occupancy_ratio: 0.05
+        trajectory_point_step: 4
+        threshold_to_consider: 0.5
+        offset_from_furthest: 20
+        use_path_orientations: false
+      PathFollowCritic:
+        enabled: true
+        cost_power: 1
+        # Progress along the path is what turns the extra acceleration into
+        # actual speed; at 5.0 the 14.0 path-alignment term dominated and the
+        # optimum stayed at a cruise-ish speed.
+        cost_weight: 8.0
+        offset_from_furthest: 5
+        threshold_to_consider: 1.4
+      PathAngleCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 2.0
+        offset_from_furthest: 10
+        threshold_to_consider: 0.5
+        max_angle_to_furthest: 1.0
+        mode: 0
+    enable_stamped_cmd_vel: false
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      update_frequency: 5.0
+      publish_frequency: 1.0
+      global_frame: odom
+      robot_base_frame: base_link
+      rolling_window: true
+      # RPP only needs the 0.9 m maximum lookahead plus the 0.35 s
+      # collision sweep; 3 m keeps 1.5 m of obstacle data around base_link.
+      width: 3
+      height: 3
+      resolution: 0.05
+      plugins:
+      - voxel_layer
+      - inflation_layer
+      keepout_filter:
+        plugin: nav2_costmap_2d::KeepoutFilter
+        enabled: false
+        filter_info_topic: keepout_costmap_filter_info
+        override_lethal_cost: true
+        lethal_override_cost: 200
+      inflation_layer:
+        plugin: nav2_costmap_2d::InflationLayer
+        # 0.28 m clears the 0.2773 m circumscribed radius SmacHybrid reports,
+        # which is the official floor for its costmap potential field; below
+        # it the SE2 checker has to test the full footprint on every expansion
+        # (the computeCircumscribedCost ERROR in the journal).  8.0 is inside
+        # the documented 3-10 decay and is the steepest value that still
+        # clears the warning.  Measured on iscc_3 with the four left-aisle
+        # goals: 3.0 puts the lane at mean cost 126 / peak 216 with 22 % of
+        # its cells above 200 (nearly lethal, flat gradient, no guidance);
+        # 8.0 is mean 80 / peak 167 / none above 200, and the share of the
+        # whole map above 200 stays at the old 16 %.  10.0 is slightly kinder
+        # (peak 151) if the lanes ever feel over-penalised.
+        cost_scaling_factor: 8.0
+        inflation_radius: 0.28
+      voxel_layer:
+        plugin: nav2_costmap_2d::VoxelLayer
+        enabled: true
+        publish_voxel_map: false
+        origin_z: 0.0
+        z_resolution: 0.05
+        z_voxels: 16
+        max_obstacle_height: 2.0
+        mark_threshold: 0
+        observation_sources: scan
+        scan:
+          topic: scan
+          max_obstacle_height: 2.0
+          clearing: true
+          marking: true
+          data_type: LaserScan
+          raytrace_max_range: 7.0
+          raytrace_min_range: 0.0
+          obstacle_max_range: 6.5
+          obstacle_min_range: 0.0
+      static_layer:
+        plugin: nav2_costmap_2d::StaticLayer
+        map_subscribe_transient_local: true
+      always_send_full_costmap: false
+      introspection_mode: disabled
+      footprint: '[[-0.06, -0.11], [-0.06, 0.11], [0.24, 0.11], [0.24, -0.11]]'
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      update_frequency: 1.0
+      publish_frequency: 1.0
+      global_frame: map
+      robot_base_frame: base_link
+      resolution: 0.05
+      track_unknown_space: true
+      plugins:
+      - static_layer
+      - obstacle_layer
+      - inflation_layer
+      keepout_filter:
+        plugin: nav2_costmap_2d::KeepoutFilter
+        enabled: false
+        filter_info_topic: keepout_costmap_filter_info
+        override_lethal_cost: true
+        lethal_override_cost: 200
+      speed_filter:
+        plugin: nav2_costmap_2d::SpeedFilter
+        enabled: false
+        filter_info_topic: speed_costmap_filter_info
+        speed_limit_topic: speed_limit
+      obstacle_layer:
+        plugin: nav2_costmap_2d::ObstacleLayer
+        enabled: true
+        observation_sources: scan
+        scan:
+          topic: scan
+          max_obstacle_height: 2.0
+          clearing: true
+          marking: true
+          data_type: LaserScan
+          raytrace_max_range: 7.0
+          raytrace_min_range: 0.0
+          obstacle_max_range: 6.5
+          obstacle_min_range: 0.0
+      static_layer:
+        plugin: nav2_costmap_2d::StaticLayer
+        map_subscribe_transient_local: true
+      inflation_layer:
+        plugin: nav2_costmap_2d::InflationLayer
+        # Identical to the local ring: SmacHybrid reads this one to decide
+        # whether the potential field may prune footprint checks, so the two
+        # must not diverge.
+        cost_scaling_factor: 8.0
+        inflation_radius: 0.28
+      always_send_full_costmap: false
+      introspection_mode: disabled
+      footprint: '[[-0.06, -0.11], [-0.06, 0.11], [0.24, 0.11], [0.24, -0.11]]'
+map_server:
+  ros__parameters:
+    introspection_mode: disabled
+keepout_filter_mask_server:
+  ros__parameters:
+    topic_name: keepout_filter_mask
+keepout_costmap_filter_info_server:
+  ros__parameters:
+    type: 0
+    filter_info_topic: keepout_costmap_filter_info
+    mask_topic: keepout_filter_mask
+    base: 0.0
+    multiplier: 1.0
+speed_filter_mask_server:
+  ros__parameters:
+    topic_name: speed_filter_mask
+speed_costmap_filter_info_server:
+  ros__parameters:
+    type: 1
+    filter_info_topic: speed_costmap_filter_info
+    mask_topic: speed_filter_mask
+    base: 100.0
+    multiplier: -1.0
+map_saver:
+  ros__parameters:
+    save_map_timeout: 5.0
+    free_thresh_default: 0.25
+    occupied_thresh_default: 0.65
+    map_subscribe_transient_local: true
+    introspection_mode: disabled
+planner_server:
+  ros__parameters:
+    allow_partial_planning: false
+    expected_planner_frequency: 5.0
+    planner_plugins:
+    - GridBased
+    costmap_update_timeout: 1.0
+    introspection_mode: disabled
+    GridBased:
+      plugin: nav2_smac_planner::SmacPlannerHybrid
+      motion_model_for_search: REEDS_SHEPP
+      # Measured full-lock radius with BM_DIFF_GAIN back at 1.0 (mid 1532):
+      # 0.343 m left / 0.368 m right at 0.25 m/s, 0.346 / 0.351 m at 0.8 m/s.
+      # The 1.8 over-drive that briefly reached 0.301 m was reverted: firmware
+      # derives the wheel differential from the steering angle, so the extra
+      # gain also amplified steering-command jitter into body yaw.
+      # 0.48 m sits ~30 % above the real full-lock radius on purpose.  At 0.40
+      # the planner still called full-lock arcs reachable and planned every
+      # hard turn as a forward arc the chassis could only track with the servo
+      # saturated, which is the inside cut.  Asking for a radius the car can
+      # hold with steering headroom removes the cut, and a turn that no longer
+      # fits now has to be solved as a Reeds-Shepp cusp instead.
+      minimum_turning_radius: 0.48
+      angle_quantization_bins: 72
+      tolerance: 0.15
+      allow_unknown: true
+      max_iterations: 1000000
+      max_on_approach_iterations: 1000
+      analytic_expansion_max_length: 3.0
+      analytic_expansion_ratio: 3.5
+      # Reverse is still allowed (board2 and the tight lanes need a cusp), but
+      # it now costs 3x forward: at 1.0 SmacHybrid answered a goal 0.10 m away
+      # with a 0.24 m forward-reverse-forward wiggle, and RPP alternated
+      # direction with it every cycle.  Reversing stays available for the
+      # cases where no forward arc fits.
+      reverse_penalty: 3.0
+      change_penalty: 0.0
+      non_straight_penalty: 1.2
+      cost_penalty: 2.0
+      retrospective_penalty: 0.015
+      # SmacPlannerHybrid builds this table at configure time; cost grows with
+      # (lookup_table_size / costmap_resolution)^2 * angle_quantization_bins.
+      # At 20.0 m on the Pi 4 that was a 54 s stall inside lifecycle configure
+      # (10.0 m -> ~21 s, 10.0 m + 36 bins -> 14.5 s).  The saved map is
+      # 5.25 x 5.25 m at 0.05 m/px, so the 7.4 m diagonal still fits
+      # comfortably.  Re-check if the map ever grows past ~9 m across.
+      lookup_table_size: 10.0
+      cache_obstacle_heuristic: true
+      downsample_costmap: true
+      downsampling_factor: 2
+      debug_visualizations: false
+smoother_server:
+  ros__parameters:
+    smoother_plugins:
+    - simple_smoother
+    - route_smoother
+    simple_smoother:
+      plugin: nav2_smoother::SimpleSmoother
+      tolerance: 1.0e-10
+      max_its: 1000
+      refinement_num: 2
+      enforce_path_inversion: true
+      do_refinement: true
+    route_smoother:
+      plugin: nav2_smoother::SimpleSmoother
+      tolerance: 1.0e-10
+      max_its: 1000
+      refinement_num: 5
+      enforce_path_inversion: false
+      do_refinement: true
+behavior_server:
+  ros__parameters:
+    local_costmap_topic: local_costmap/costmap_raw
+    global_costmap_topic: global_costmap/costmap_raw
+    local_footprint_topic: local_costmap/published_footprint
+    global_footprint_topic: global_costmap/published_footprint
+    cycle_frequency: 10.0
+    behavior_plugins:
+    - spin
+    - backup
+    - drive_on_heading
+    - wait
+    backup:
+      plugin: nav2_behaviors::BackUp
+      acceleration_limit: 2.5
+      deceleration_limit: -2.5
+      minimum_speed: 0.1
+    drive_on_heading:
+      plugin: nav2_behaviors::DriveOnHeading
+      acceleration_limit: 2.5
+      deceleration_limit: -2.5
+      minimum_speed: 0.1
+    wait:
+      plugin: nav2_behaviors::Wait
+    local_frame: odom
+    global_frame: map
+    robot_base_frame: base_link
+    transform_tolerance: 0.1
+    # 4 s of travel (0.48 m at the 0.12 m/s recovery speed) so the 0.40 m
+    # BackUp is collision-checked all the way, not just its first 0.24 m.
+    simulate_ahead_time: 4.0
+    max_rotational_vel: 1.0
+    min_rotational_vel: 0.4
+    rotational_acc_lim: 3.2
+    spin:
+      plugin: nav2_behaviors::Spin
+    enable_stamped_cmd_vel: false
+waypoint_follower:
+  ros__parameters:
+    loop_rate: 20
+    stop_on_failure: false
+    introspection_mode: disabled
+    waypoint_task_executor_plugin: wait_at_waypoint
+    wait_at_waypoint:
+      plugin: nav2_waypoint_follower::WaitAtWaypoint
+      enabled: true
+      waypoint_pause_duration: 200
+route_server:
+  ros__parameters:
+    boundary_radius_to_achieve_node: 1.0
+    radius_to_achieve_node: 2.0
+    smooth_corners: true
+    operations:
+    - AdjustSpeedLimit
+    - ReroutingService
+    - CollisionMonitor
+    ReroutingService:
+      plugin: nav2_route::ReroutingService
+    AdjustSpeedLimit:
+      plugin: nav2_route::AdjustSpeedLimit
+    CollisionMonitor:
+      plugin: nav2_route::CollisionMonitor
+      max_collision_dist: 3.0
+    edge_cost_functions:
+    - DistanceScorer
+    - CostmapScorer
+    DistanceScorer:
+      plugin: nav2_route::DistanceScorer
+    CostmapScorer:
+      plugin: nav2_route::CostmapScorer
+collision_monitor:
+  ros__parameters:
+    enabled: true
+    base_frame_id: base_footprint
+    odom_frame_id: odom
+    cmd_vel_in_topic: cmd_vel_smoothed
+    cmd_vel_out_topic: cmd_vel
+    state_topic: collision_monitor_state
+    transform_tolerance: 0.2
+    source_timeout: 1.0
+    base_shift_correction: true
+    stop_pub_timeout: 2.0
+    polygons:
+    - FootprintApproach
+    FootprintApproach:
+      type: polygon
+      action_type: approach
+      footprint_topic: local_costmap/published_footprint
+      time_before_collision: 1.2
+      simulation_time_step: 0.1
+      min_points: 6
+      visualize: false
+      enabled: true
+    observation_sources:
+    - scan
+    scan:
+      type: scan
+      topic: scan
+      min_height: 0.15
+      max_height: 2.0
+      enabled: true
+docking_server:
+  ros__parameters:
+    controller_frequency: 50.0
+    initial_perception_timeout: 5.0
+    wait_charge_timeout: 5.0
+    dock_approach_timeout: 30.0
+    undock_linear_tolerance: 0.05
+    undock_angular_tolerance: 0.1
+    max_retries: 3
+    base_frame: base_link
+    fixed_frame: odom
+    dock_prestaging_tolerance: 0.5
+    introspection_mode: disabled
+    dock_plugins:
+    - simple_charging_dock
+    simple_charging_dock:
+      plugin: opennav_docking::SimpleChargingDock
+      docking_threshold: 0.05
+      staging_x_offset: -0.7
+      use_external_detection_pose: true
+      use_battery_status: false
+      use_stall_detection: false
+      dock_direction: forward
+      external_detection_timeout: 1.0
+      external_detection_translation_x: -0.18
+      external_detection_translation_y: 0.0
+      external_detection_rotation_roll: -1.57
+      external_detection_rotation_pitch: -1.57
+      external_detection_rotation_yaw: 0.0
+      filter_coef: 0.1
+    controller:
+      k_phi: 3.0
+      k_delta: 2.0
+      v_linear_min: 0.15
+      v_linear_max: 0.15
+      use_collision_detection: true
+      costmap_topic: local_costmap/costmap_raw
+      footprint_topic: local_costmap/published_footprint
+      transform_tolerance: 0.1
+      projection_time: 5.0
+      simulation_step: 0.1
+      dock_collision_threshold: 0.3
+loopback_simulator:
+  ros__parameters:
+    base_frame_id: base_footprint
+    odom_frame_id: odom
+    map_frame_id: map
+    scan_frame_id: base_scan
+    update_duration: 0.02
+    scan_range_min: 0.05
+    scan_range_max: 30.0
+    scan_angle_min: -3.1415
+    scan_angle_max: 3.1415
+    scan_angle_increment: 0.02617
+    scan_use_inf: true

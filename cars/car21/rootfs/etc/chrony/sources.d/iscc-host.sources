@@ -1,0 +1,2 @@
+# Host dev box fixed at 10.211.121.1 (local SNTP, port 12345/udp).
+server 10.211.121.1 port 12345 iburst prefer

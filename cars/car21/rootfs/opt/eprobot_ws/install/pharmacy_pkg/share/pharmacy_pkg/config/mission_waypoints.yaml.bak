@@ -1,0 +1,39 @@
+nav_pharmacy:
+  ros__parameters:
+    # [x, y, yaw] in the Nav2 map frame. Competition waypoints require exactly
+    # three finite values; only the optional ac_transit entry may omit yaw.
+    waypoints:
+      C: [1.47, 1.85, 1.5707963267948966]
+      # 0.655 sat 0.216 m from the shelf corner, i.e. 1.6 cm outside the
+      # 0.20 m footprint half-diagonal.  The 0.87 rad heading correction the
+      # approach needs there has no feasible Ackermann manoeuvre (an ideal
+      # single arc would be 0.20 m, the planner lattice is 0.48 m), so
+      # SmacHybrid answered with a 3-4 cm forward/reverse dither that RPP
+      # executed as a twitch.  Centred in the aisle: 0.344 m clearance, same
+      # as C and B.
+      A: [0.605, 2.50, 1.5707963267948966]
+      B: [1.46, 2.88, 0.7853981633974483]
+      # The four window points are meant to sit 0.30 m off their shelf (what
+      # 1 and 3 already do).  At -1.58 window 4 was 0.22 m off the shelf and
+      # its footprint corner only 0.10 m away -- inside the 0.13 m inscribed
+      # band, i.e. the planner calls that pose "Start occupied" and RPP calls
+      # it "collision ahead".  -1.66 restores 0.30 m / 0.18 m corner.
+      '4': [-1.63, 0.762, -1.5707963267948966]
+      '3': [-2.37, 1.41, -1.5707963267948966]
+      # Same story, milder: 0.281 m / 0.14 m corner at -1.58.
+      '2': [-1.62, 1.84, -1.5707963267948966]
+      '1': [-2.37, 2.41, -1.5707963267948966]
+      # home keeps the ROS 1 default at the map origin.
+      # board1 is the measured recognition point on the competition field.
+      home: [0.0, 0.0, 0.0]
+      board2: [-0.903, 3.76, -3.141592653589793]
+      board1: [0.518, 0.0, 0.0]
+      # Optional AC-task transit, driven between the C and A pickups
+      # (C -> ac_transit -> A -> board2). Accepts [x, y] (yaw defaults to 0.0)
+      # or [x, y, yaw]. Remove this entry to skip the transit; the mission then
+      # records ac_transit_missing and runs C -> A -> board2.
+      ac_transit: [1.49, 2.88, 0.7853981633974483]
+      # ac_transit: [1.45, 2.78, 0.7853981633974483]
+      # Optional; uncomment after measuring the real boundary/exit positions.
+      # qr_reposition: [0.0, 0.0, 0.0]
+      # board2_exit: [0.0, 0.0, 0.0]

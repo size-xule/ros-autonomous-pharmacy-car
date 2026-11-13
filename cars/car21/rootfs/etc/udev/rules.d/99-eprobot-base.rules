@@ -1,0 +1,4 @@
+# ISCC_CAR chassis UART on Raspberry Pi 4 (ttyAMA0, 115200 8N1).
+# The existing car uses the same symlink name, so the driver's default port
+# works unchanged after a reflash.
+SUBSYSTEM=="tty", KERNEL=="ttyAMA0", SYMLINK+="EPRobot_base", MODE="0666", GROUP="dialout"

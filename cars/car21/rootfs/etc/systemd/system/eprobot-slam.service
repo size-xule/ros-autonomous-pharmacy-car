@@ -1,0 +1,22 @@
+[Unit]
+Description=EPRobot ROS 2 SLAM Toolbox mapping (manual start)
+Documentation=file:///home/ubuntu/eprobot_navigation/README.md
+After=eprobot-base.service eprobot-imu.service lslidar.service
+Wants=eprobot-base.service eprobot-imu.service
+Conflicts=eprobot-nav.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+Environment=ROS_DOMAIN_ID=0
+Environment=RCUTILS_LOGGING_BUFFERED_STREAM=1
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/bin/bash -lc 'source /opt/ros/lyrical/setup.bash && source /opt/eprobot_ws/install/setup.bash && exec ros2 launch /home/ubuntu/eprobot_navigation/launch/slam_mapping.launch.py'
+KillSignal=SIGINT
+KillMode=mixed
+TimeoutStopSec=15
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

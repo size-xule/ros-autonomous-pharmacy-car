@@ -1,0 +1,202 @@
+#!/usr/bin/env bash
+# lslidar-ctl - start/stop helper for the LSLIDAR M10 driver.
+#
+# The radar is OFF by default.  This helper is only called by the manually
+# started lslidar.service:
+#   start      SET_LASER 2 on the chassis + M10 start frame + driver
+#   stop       SET_LASER 0 on the chassis
+#   post-stop  direct M10 stop frame, after the driver released the port
+#
+# The chassis serial port is owned by eprobot_base.  Do not write it directly:
+# use /laser_mode so the base node keeps its seq/ACK bookkeeping consistent.
+set -euo pipefail
+
+ROS_DISTRO="${ROS_DISTRO:-lyrical}"
+WORKSPACE="${WORKSPACE:-/opt/eprobot_ws}"
+PORT="${PORT:-/dev/ttyUSB0}"
+export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
+export RCUTILS_LOGGING_BUFFERED_STREAM=1
+export PYTHONUNBUFFERED=1
+
+# ROS's setup.bash reads variables that are usually unset and bails out under
+# `set -u`, so relax it only around the sourcing.
+set +u
+# shellcheck disable=SC1090
+source "/opt/ros/${ROS_DISTRO}/setup.bash"
+# shellcheck disable=SC1090
+source "${WORKSPACE}/install/setup.bash"
+set -u
+
+log() { printf '[lslidar-ctl] %s\n' "$*"; }
+
+wait_port() {
+  for _ in $(seq 1 50); do
+    [[ -e "$PORT" ]] && break
+    sleep 0.2
+  done
+  if [[ ! -e "$PORT" ]]; then
+    log "ERROR: ${PORT} not found; check the radar USB cable (CN7)" >&2
+    return 1
+  fi
+  # Two drivers on the same tty split the byte stream: both see garbage and
+  # the scan rate collapses.  Refuse to start if anyone else already has it.
+  local holders
+  holders="$(fuser "$PORT" 2>/dev/null || true)"
+  holders="${holders// /}"
+  if [[ -n "$holders" ]]; then
+    log "ERROR: ${PORT} is already in use by pid ${holders}; refusing to start a second driver" >&2
+    return 1
+  fi
+  return 0
+}
+
+publish_laser() {
+  local mode="$1"
+  python3 - "$mode" <<'PY'
+import sys
+import time
+
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import UInt8
+
+mode = int(sys.argv[1])
+rclpy.init()
+node = Node("lslidar_ctl")
+rc = 0
+try:
+    pub = node.create_publisher(UInt8, "/laser_mode", 1)
+    # Allow plenty of time: eprobot-base may be re-arming after a restart.
+    deadline = time.monotonic() + 10.0
+    while time.monotonic() < deadline and pub.get_subscription_count() == 0:
+        rclpy.spin_once(node, timeout_sec=0.05)
+    if pub.get_subscription_count() == 0:
+        print("[lslidar-ctl] ERROR: no /laser_mode subscriber; "
+              "is eprobot-base.service running?", file=sys.stderr)
+        rc = 1
+    else:
+        msg = UInt8()
+        msg.data = mode
+        for _ in range(5):
+            pub.publish(msg)
+            rclpy.spin_once(node, timeout_sec=0.05)
+finally:
+    node.destroy_node()
+    rclpy.shutdown()
+sys.exit(rc)
+PY
+}
+
+# Best effort: the chassis reports laser_on in /diagnostics, but the check is
+# advisory only (the base node republishes at 1 Hz and may be restarting).
+laser_is_on() {
+  python3 - <<'PY'
+import sys
+import time
+
+import rclpy
+from rclpy.node import Node
+from diagnostic_msgs.msg import DiagnosticArray
+
+seen = []
+rclpy.init()
+node = Node("lslidar_ctl_probe")
+try:
+    def cb(msg):
+        for status in msg.status:
+            for kv in status.values:
+                if kv.key == "laser_on":
+                    seen.append(kv.value)
+
+    node.create_subscription(DiagnosticArray, "/diagnostics", cb, 10)
+    deadline = time.monotonic() + 3.0
+    while time.monotonic() < deadline and not seen:
+        rclpy.spin_once(node, timeout_sec=0.1)
+finally:
+    node.destroy_node()
+    rclpy.shutdown()
+sys.exit(0 if seen and seen[-1] == "true" else 1)
+PY
+}
+
+# Vendor M10 start/stop frame: 188 bytes, A5 5A 55 ... 01 <1|0> FA FB.
+# This is the same frame LslidarDriver::lidar_order() sends on /lslidar_order.
+lidar_frame() {
+  local action="$1"
+  [[ -e "$PORT" ]] || return 0
+  python3 - "$PORT" "$action" <<'PY'
+import os
+import sys
+import termios
+
+port, action = sys.argv[1], sys.argv[2]
+try:
+    fd = os.open(port, os.O_RDWR | os.O_NOCTTY)
+except OSError:
+    sys.exit(0)
+try:
+    attrs = termios.tcgetattr(fd)
+    attrs[0] &= ~(termios.IGNBRK | termios.BRKINT | termios.PARMRK |
+                  termios.ISTRIP | termios.INLCR | termios.IGNCR |
+                  termios.ICRNL | termios.IXON)
+    attrs[1] &= ~termios.OPOST
+    attrs[2] &= ~(termios.CSIZE | termios.PARENB)
+    attrs[2] |= termios.CS8 | termios.CREAD | termios.CLOCAL
+    attrs[3] &= ~(termios.ECHO | termios.ECHONL | termios.ICANON |
+                  termios.ISIG | termios.IEXTEN)
+    speed = getattr(termios, "B460800", 0)
+    attrs[4] = speed
+    attrs[5] = speed
+    attrs[6][termios.VMIN] = 0
+    attrs[6][termios.VTIME] = 0
+    termios.tcsetattr(fd, termios.TCSANOW, attrs)
+    frame = bytearray(188)
+    frame[0:3] = b"\xA5\x5A\x55"
+    frame[184] = 0x01
+    frame[185] = 0x01 if action == "start" else 0x00
+    frame[186] = 0xFA
+    frame[187] = 0xFB
+    os.write(fd, frame)
+    termios.tcdrain(fd)
+finally:
+    os.close(fd)
+PY
+}
+
+case "${1:-}" in
+  start)
+    wait_port
+    publish_laser 2
+    if laser_is_on; then
+      log "chassis laser ON (SET_LASER 2)"
+    else
+      log "WARNING: laser_on not confirmed by /diagnostics yet"
+    fi
+    lidar_frame start
+    log "starting lslidar_driver_node on ${PORT}"
+    exec ros2 launch lslidar_driver lslidar_m10.launch.py serial_port:="${PORT}"
+    ;;
+  stop)
+    if publish_laser 0; then
+      log "chassis laser OFF (SET_LASER 0)"
+    else
+      log "WARNING: could not send SET_LASER 0" >&2
+    fi
+    # The M10 board itself is stopped by post-stop's direct start/stop frame
+    # once the driver has released the port; publishing /lslidar_order here
+    # only added another 3 s of ROS discovery to `systemctl stop`.
+    exit 0
+    ;;
+  post-stop)
+    # ExecStopPost also runs when start itself failed; never fail the unit here.
+    # ExecStop already sent SET_LASER 0 through /laser_mode, so only the M10
+    # board needs the stop frame (the driver no longer owns the port).
+    lidar_frame stop || true
+    log "radar stopped"
+    exit 0
+    ;;
+  *)
+    echo "usage: $0 {start|stop|post-stop}" >&2
+    exit 2
+    ;;
+esac

@@ -1,0 +1,5 @@
+# Aliyun public NTP (2026-10-27). Replaces the Ubuntu NTS pools in
+# ubuntu-ntp-pools.sources.disabled. Aliyun does not support NTS, so plain 123/udp.
+pool ntp.aliyun.com iburst maxsources 4
+server ntp1.aliyun.com iburst
+server ntp2.aliyun.com iburst

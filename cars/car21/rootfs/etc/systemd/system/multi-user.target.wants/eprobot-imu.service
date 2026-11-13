@@ -1,0 +1,28 @@
+[Unit]
+Description=ISCC_CAR WHEELTEC H30 IMU (Yesense ROS 2 driver)
+Documentation=file:///opt/eprobot_ws/docs/H30_IMU.md
+After=network-online.target eprobot-base.service
+Wants=network-online.target
+
+[Service]
+# Fast DDS shared memory keeps one lock per participant; repeated restarts
+# exhaust it ('Failed init_port fastdds_portXXXX') and then Nav2 action
+# servers stop acknowledging goals.  UDP-only avoids the whole SHM path.
+Environment=FASTDDS_BUILTIN_TRANSPORTS=UDPv4
+Type=simple
+User=keyuan22
+Group=dialout
+Environment=ROS_DOMAIN_ID=1
+Environment=RCUTILS_LOGGING_BUFFERED_STREAM=1
+Environment=PYTHONUNBUFFERED=1
+Environment=LD_LIBRARY_PATH=/opt/eprobot_ws/install/serial/lib
+ExecStart=/bin/bash -lc 'source /opt/ros/lyrical/setup.bash && source /opt/eprobot_ws/install/setup.bash && exec ros2 launch yesense_std_ros2 yesense_node.launch.py'
+Restart=on-failure
+RestartSec=2
+KillSignal=SIGINT
+TimeoutStopSec=10
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target
+

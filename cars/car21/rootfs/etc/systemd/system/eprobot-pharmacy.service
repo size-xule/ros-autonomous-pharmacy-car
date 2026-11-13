@@ -1,0 +1,27 @@
+[Unit]
+Description=EPRobot ROS 2 pharmacy providers (camera, QR/board-2, speech, judge)
+Documentation=file:///opt/eprobot_ws/install/pharmacy_pkg/share/pharmacy_pkg/README.md
+After=eprobot-base.service eprobot-imu.service
+Wants=eprobot-base.service eprobot-imu.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+SupplementaryGroups=video audio
+Environment=ROS_DOMAIN_ID=0
+Environment=RCUTILS_LOGGING_BUFFERED_STREAM=1
+Environment=PYTHONUNBUFFERED=1
+Environment=HOME=/home/ubuntu
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=JUDGE_CAR_ID=25
+EnvironmentFile=-/etc/default/eprobot-pharmacy
+ExecStartPre=-/usr/bin/amixer -c 0 sset PCM 100% unmute
+ExecStart=/bin/bash -lc "source /opt/ros/lyrical/setup.bash && source /opt/eprobot_ws/install/setup.bash && exec ros2 launch pharmacy_pkg competition.launch.py judge_car_id:=$JUDGE_CAR_ID"
+KillSignal=SIGINT
+KillMode=mixed
+TimeoutStopSec=20
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

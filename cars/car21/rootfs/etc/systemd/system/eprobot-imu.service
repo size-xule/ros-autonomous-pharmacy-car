@@ -1,0 +1,24 @@
+[Unit]
+Description=ISCC_CAR WHEELTEC H30 IMU (Yesense ROS 2 driver)
+Documentation=file:///opt/eprobot_ws/docs/H30_IMU.md
+After=network-online.target eprobot-base.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=dialout
+Environment=ROS_DOMAIN_ID=0
+Environment=RCUTILS_LOGGING_BUFFERED_STREAM=1
+Environment=PYTHONUNBUFFERED=1
+Environment=LD_LIBRARY_PATH=/opt/eprobot_ws/install/serial/lib
+ExecStart=/bin/bash -lc 'source /opt/ros/lyrical/setup.bash && source /opt/eprobot_ws/install/setup.bash && exec ros2 launch yesense_std_ros2 yesense_node.launch.py'
+Restart=on-failure
+RestartSec=2
+KillSignal=SIGINT
+TimeoutStopSec=10
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target
+

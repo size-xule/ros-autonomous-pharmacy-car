@@ -1,0 +1,15 @@
+[Unit]
+Description=Test and switch Raspberry Pi boot assets written by flash-kernel
+Documentation=man:piboot-try(8)
+Requires=local-fs.target
+After=local-fs.target
+Before=getty.target
+ConditionPathExists=/proc/device-tree/chosen/bootloader/tryboot
+ConditionPathExists=/boot/firmware/current/state
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/piboot-try --validate
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,18 @@
+/lslidar_driver_node:
+  ros__parameters:
+    frame_id: laser_link
+    lidar_name: M10
+    interface_selection: serial
+    serial_port_: /dev/ttyUSB0
+    scan_topic: /scan
+    pointcloud_topic: /lslidar_point_cloud
+    pubScan: true
+    pubPointCloud2: false
+    min_range: 0.05
+    max_range: 10.0
+    angle_disable_min: 0.0
+    angle_disable_max: 0.0
+    fixed_scan_points: 982
+    use_gps_ts: false
+    high_reflection: false
+    compensation: false

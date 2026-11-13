@@ -1,0 +1,75 @@
+detect_qrcode:
+  ros__parameters:
+    image_topic: /camera/rgb/image_raw
+    qr_log: ~/.ros/pharmacy/qr.jsonl
+    scan_hz: 5.0
+
+pharmacy_board2:
+  ros__parameters:
+    image_topic: /camera/rgb/image_raw
+    fast_primary: true
+    scan_period: 0.03
+    max_frame_age: 0.5
+    max_vote_gap: 0.5
+    need: 2
+
+pharmacy_board2_ocr:
+  ros__parameters:
+    image_topic: /camera/rgb/image_raw
+    python: /home/EPRobot/board2_ocr/run_worker.sh
+    worker: /home/EPRobot/board2_ocr/board2_ocr_worker.py
+    # Pi 4: ~135 ms for the crop fast path, ~0.5-1.5 s only when the crop is
+    # unusable and full-frame detection runs.  The worker is enabled only
+    # after the car arrives at the board, so 0.2 s is safe; need=2 rejects a
+    # single misread without the 8 s window noticing.
+    scan_period: 0.2
+    startup_timeout: 15.0
+    request_timeout: 5.0
+    restart_delay: 2.0
+    max_consecutive_failures: 3
+    need: 2
+
+pharmacy_speech:
+  ros__parameters:
+    audio_dir: /opt/eprobot_ws/install/pharmacy_pkg/share/pharmacy_pkg/audio/competition
+    # The car is headless: no PulseAudio/PipeWire server runs, so use ALSA
+    # directly.  The service unit also needs the audio supplementary group.
+    executable: /usr/bin/aplay
+    device: plughw:0,0
+    speech_topic: /pharmacy/car_speech
+    timeout: 15.0
+
+judge_tcp:
+  ros__parameters:
+    host: 10.211.121.38
+    port: 8888
+    car_id: '25'
+    rate: 10.0
+    connect_timeout: 1.0
+    send_timeout: 1.0
+    reconnect_initial: 0.25
+    reconnect_max: 5.0
+
+nav_pharmacy:
+  ros__parameters:
+    max_rounds: 3
+    max_samples: 8
+    # Safety cap only: 3 rounds / 8 samples terminate the competition match.
+    # Set to 0.0 explicitly to enable continuous practice mode (both limits ignored).
+    match_seconds: 1800.0
+    pickup_seconds: 1.5
+    delivery_seconds: 1.5
+    qr_timeout: 5.0
+    board2_timeout: 8.0
+    board2_settle: 0.0
+    move_timeout: 15.0
+    pickup_heading: 1.5707963267948966
+    speech_timeout: 60.0
+    stop_timeout: 5.0
+    stationary_hold: 0.3
+    odom_timeout: 0.5
+    stationary_linear: 0.02
+    stationary_angular: 0.03
+    mission_log: ~/.ros/pharmacy/mission.jsonl
+    evidence_dir: ~/.ros/pharmacy/evidence
+    python: python3

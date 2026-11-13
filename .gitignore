@@ -21,3 +21,6 @@ evidence/
 *.jsonl
 __pycache__/
 *.pyc
+
+# 车上音频的中间备份（1.5x / 1.0x 之类），体积大且可再生成
+*/audio/competition.pre_*/

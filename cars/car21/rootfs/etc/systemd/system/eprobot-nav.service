@@ -1,0 +1,23 @@
+[Unit]
+Description=EPRobot ROS 2 Nav2 navigation (AMCL + saved map, manual start)
+Documentation=file:///home/ubuntu/eprobot_navigation/README.md
+After=eprobot-base.service eprobot-imu.service lslidar.service
+Wants=eprobot-base.service eprobot-imu.service lslidar.service
+Conflicts=eprobot-slam.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+Environment=ROS_DOMAIN_ID=0
+Environment=RCUTILS_LOGGING_BUFFERED_STREAM=1
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/etc/default/eprobot-nav
+ExecStart=/bin/bash -lc 'source /opt/ros/lyrical/setup.bash && source /opt/eprobot_ws/install/setup.bash && exec ros2 launch /home/ubuntu/eprobot_navigation/launch/nav2_bringup.launch.py map:="${NAV_MAP_YAML:-/home/ubuntu/maps/iscc_3.yaml}"'
+KillSignal=SIGINT
+KillMode=mixed
+TimeoutStopSec=20
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,56 @@
+# EPRobot chassis driver (wire protocol v2.1).
+#
+#   ros2 launch eprobot_base base.launch.py
+#   ros2 launch eprobot_base base.launch.py params_file:=/path/to/other.yaml
+#
+# transport: serial (real car), socket (Renode / remote UART), loopback (smoke test).
+eprobot_base:
+  ros__parameters:
+    # --- link -----------------------------------------------------------
+    transport: serial
+    port: /dev/EPRobot_base
+    baudrate: 115200
+    socket_host: 127.0.0.1
+    socket_port: 15461
+
+    # --- chassis geometry / scaling -------------------------------------
+    base_kv: 1.0            # firmware D=0.065 m matches the measured wheels
+    # Effective wheelbase for /cmd_vel -> steering conversion.  The physical
+    # front/rear axle is 0.160 m (BM_AXLE_M); 0.171 m absorbs the measured
+    # steering-link/angle scale error.  See reports/nav2_turn_model_20261024.md.
+    axle_length: 0.171
+    track_width: 0.155      # left/right track, BM_WHEEL_BASE_M
+    max_vx: 1.2             # host limit until the chassis is re-calibrated
+    max_steer_mrad: 524     # +/-30 deg, firmware clamp
+    min_turn_speed: 0.0     # >0 turns a pure rotation into a slow arc
+    min_vx: 0.05            # raise non-zero /cmd_vel to the tested wheel minimum
+
+    # --- control / timeouts ---------------------------------------------
+    cmd_rate_hz: 30.0
+    cmd_timeout: 0.5
+    telemetry_timeout: 0.2
+    link_timeout: 0.4
+
+    # --- speed loop gains (sent in every SET_VELOCITY) ------------------
+    kp: 35.0
+    ki: 50.0
+    kd: 0.0
+
+    # --- frames / publishing --------------------------------------------
+    publish_tf: true
+    odom_frame: odom
+    base_frame: base_link
+    # The H30 is the only IMU/yaw source.  The chassis IMU is neither queried
+    # nor republished; /imu/data comes from eprobot-imu.service.
+    h30_topic: /imu/data
+    h30_timeout_s: 0.3
+    # The driver streams at 400 Hz; /odom is 50 Hz and the H30 yaw is
+    # absolute, so the node only parses 100 samples/s.  Lower this only if
+    # the H30 stream itself is slowed down.
+    h30_rate_hz: 100.0
+    odom_rate_hz: 50.0
+    diagnostics_rate_hz: 1.0
+
+    # --- safety ----------------------------------------------------------
+    auto_clear_faults: true
+    laser_mode: 0           # 0 off, 1 eco, 2 max

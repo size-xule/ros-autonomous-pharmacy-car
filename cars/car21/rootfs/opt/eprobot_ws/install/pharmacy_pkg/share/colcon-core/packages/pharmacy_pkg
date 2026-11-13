@@ -1,0 +1,1 @@
+ament_index_cpp:cv_bridge:geometry_msgs:launch:launch_ros:libopencv-dev:libssl-dev:libzbar-dev:nav2_msgs:nav_msgs:nlohmann_json:python3:rclcpp:rclcpp_action:sensor_msgs:std_msgs:tf2:tf2_geometry_msgs:tf2_ros:v4l2_camera

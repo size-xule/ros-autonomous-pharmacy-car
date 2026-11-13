@@ -37,9 +37,11 @@ cars/
     firmware/
       chassis_mcu/          ← ★ STM32 底盘固件源码（两个版本）+ 原理图 + 协议表
       README.md             ← 固件与 ROS 2 的关系、关键参数、烧录/核对方法
-  car21/                    ← 预留位（初代机 10.211.121.21，卡被拔走）
-    README.md               ← 占位说明 + 从 SD 卡导出的方法
-    export_from_sd.sh       ← 在 .22 上跑，把 .21 的卡内容整理成同样的结构
+  car21/                    ← ★ 初代机（10.211.121.21 / EPRobot1）· 2026-11-13 从 SD 卡只读取件
+    README.md               ← 档案：账号/AP 热点实现/与 car22 的六处硬差异/缺源码的结论
+    rootfs/                 ← 成品：pharmacy_pkg、nav 配置、hostapd+dnsmasq、unit、WiFi 切换脚本
+    src/                    ← 需要 colcon build 的 5 个包
+    export_from_sd.sh       ← 从 .21 的卡再导出一次（只读 + trap 自动 umount）
   car24-ros1/               ← ★ ROS 2 升级前的出厂状态索引（Ubuntu 18.04 / ROS 1）
     README.md               ← 出厂镜像名、厂商 PDF 要点、5 个 gitlink 缺口、取件命令
     factory/                ← 从 git 抽出的出厂原件：厂商 demo + 厂商驱动 + 590 行原版驱动
@@ -93,9 +95,9 @@ iscc start                 # ★ 车会动
 
 ---
 
-## 两台车（别搞混）
+## 三台车（别搞混）
 
-| | **car22（本仓库主目标）** | **car21（预留）** |
+| | **car22（本仓库主目标）** | **car21（初代机）** |
 |---|---|---|
 | IP | `10.211.121.22` | `10.211.121.21` |
 | 主机名 | `EPRobot2` | `EPRobot1` |
@@ -103,10 +105,14 @@ iscc start                 # ★ 车会动
 | 系统 / ROS | Ubuntu 26.04.1 / Lyrical | 同 |
 | 相机 | Astra S（无 UVC，Orbbec OpenNI2 + C++ mono8 relay） | Astra Pro HD（有 UVC）+ Astra Pro |
 | WiFi | 连外部热点 `OnePlusAce5` | 自发热点 `yaofang` |
-| 状态 | 在线 | 离线（系统卡插在 `.22` 的读卡器上） |
+| 状态 | 在线 | **已归档**（2026-11-13 只读取件；车本体仍无卡） |
 
 > ⚠️ **主机名会撞**：`.21` 和历史上那台 ROS 1 的 `.24` 都叫 `EPRobot1`。
 > **认车只用 IP + 账号 + ROS 版本**，不要用 `hostname`。
+>
+> 🗄 **第三台（历史）**：`cars/car24-ros1/` 是 ROS 2 升级前那台 ROS 1 车（`.24`，Ubuntu 18.04 / Melodic），已停用，只作归档与对照。
+>
+> 🔎 **`.21` 和 `.22` 的航点差得很大**（`board2` 差 0.72 m、`board1` 差 10 cm），**绝不要互抄**，见 `cars/car21/README.md` §2。
 
 ---
 

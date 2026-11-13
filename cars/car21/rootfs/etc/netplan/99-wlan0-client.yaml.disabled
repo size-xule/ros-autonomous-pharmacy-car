@@ -1,0 +1,17 @@
+# .21 客户端模式：连 OnePlusAce5（与 .22 同一热点），静态 10.211.121.21
+network:
+  version: 2
+  renderer: networkd
+  wifis:
+    wlan0:
+      dhcp4: false
+      dhcp6: false
+      addresses: [10.211.121.21/24]
+      routes:
+        - to: default
+          via: 10.211.121.1
+      nameservers:
+        addresses: [114.114.114.114, 223.5.5.5]
+      access-points:
+        "OnePlusAce5":
+          password: "WIFI_PASSWORD_HERE"

@@ -1,93 +1,159 @@
-# car21（预留位）· 10.211.121.21 / EPRobot1
+# car21 档案（10.211.121.21 / EPRobot1）· 初代机
 
-> **本目录现在是空的占位。** 因为 `.21` 的系统卡被拔下来插在 `.22` 的 USB 读卡器上，
-> 车本体无系统、开不了机，没法直接 ssh 拉文件。
-
----
-
-## 1. 这台车是什么
-
-| 项 | 值 |
-|---|---|
-| IP | `10.211.121.21` |
-| 主机名 | `EPRobot1`（⚠️ 与历史 ROS 1 车 `.24` 同名，**别用 hostname 认车**） |
-| 账号 / 密码 | `ubuntu` / `<REDACTED>` |
-| 系统 / ROS | Ubuntu 26.04.1 / ROS 2 Lyrical |
-| 工作空间 | `/opt/eprobot_ws` |
-| 家目录 | `/home/ubuntu` |
-| 相机 | **Astra Pro HD**（`2bc5:0501`，**有 UVC**）+ Astra Pro（`2bc5:0403`） |
-| 相机链 | **无 relay**，相机直出 `mono8` |
-| WiFi | **AP 模式**：自己发 `yaofang`（密码 `<REDACTED>`） |
-| 任务包 | `pharmacy_pkg`（二进制，与 `.22` 同源但参数不同） |
-| 状态 | **离线**（无卡） |
-
-**和 `.22` 的三处关键差异**（部署/排障时必须分开看）
-1. **相机不同** → `.22` 的 `openni2-camera + mono8-relay` 这套**不要**装到 `.21`；它有 UVC，用 `v4l2_camera` 或厂商 launch。
-2. **网络模式不同** → `.21` 是 AP（车发信号），`.22` 是 STA（连热点）。
-3. **参数可能不同** → 航点、限速、曝光都是各自标定的，**不要互抄**。
+> **2026-11-13 从 SD 卡只读取出并归档**（卡当时插在 `.22` 的 USB 读卡器上，`/dev/sda2`）。
+> 取件方式：`mount -o ro` → `tar -chzf -`（`-h` 解引用软链）→ `umount`。**全程只读，卡未写入一个字节。**
+> 车本体目前无卡、开不了机；把卡插回去并开机即恢复。
 
 ---
 
-## 2. 怎么把 `.21` 的内容填进来
+## 1. 身份卡（实测，不是抄来的）
 
-### 步骤 A：在 `.22` 上只读挂载 `.21` 的卡
-
-```bash
-ssh keyuan22@10.211.121.22
-
-lsblk -o NAME,SIZE,FSTYPE,LABEL,MOUNTPOINT
-#   要看到 sda1 vfat system-boot + sda2 ext4 writable，且都无挂载点
-
-sudo mkdir -p /mnt/sd21
-sudo mount -o ro /dev/sda2 /mnt/sd21     # ★ 必须 -o ro
-sudo cat /mnt/sd21/etc/hostname          # 确认是 EPRobot1，别读错卡
-```
-
-### 步骤 B：用本目录的脚本导出成同样的结构
-
-```bash
-# 在 .22 上（脚本会 read-only 读取，输出到 /tmp/car21-export.tgz）
-bash export_from_sd.sh
-
-# 在主机上拉回来
-scp keyuan22@10.211.121.22:/tmp/car21-export.tgz .
-mkdir -p /tmp/car21 && tar xzf car21-export.tgz -C /tmp/car21
-# 然后按 cars/car22/ 的布局搬进本目录
-```
-
-### 步骤 C：卸载（**必做**）
-
-```bash
-sudo umount /mnt/sd21
-lsblk -o NAME,MOUNTPOINT | grep sda      # 挂载点必须为空
-```
-
-> ⚠️ 不卸载就拔读卡器 = 脏文件系统，`.21` 开机可能 `fsck` 失败甚至起不来。
-
----
-
-## 3. 卡里最值得捞的三样
-
-| # | 东西 | 为什么值钱 |
+| 项 | 值 | 证据 |
 |---|---|---|
-| 1 | `/opt/eprobot_ws/src/` 里**有没有 `pharmacy_pkg`** | 如果有 → 那就是 `.22` 缺的**任务层源码**，直接解决"只能改参数"的困境 |
-| 2 | `/boot/firmware/firstrun.sh`、`/etc/hostapd/hostapd.conf`、`/etc/systemd/system/*hotspot*` | **`yaofang` 热点是怎么配出来的**（竞赛笔记 §18.3 的"路线①"） |
-| 3 | `~/eprobot_navigation/{config,scripts}`、`.../config/mission_waypoints.yaml` | `.21` 的**真实标定值**（航点/限速/曝光），和 `.22` 对比就知道哪些是"车特性"、哪些是"场地特性" |
+| IP（AP 模式） | `10.211.121.21` | `/etc/hostapd/iscc-ap.conf` + `iscc-hotspot.service` 的 `ip addr replace` |
+| 主机名 | `EPRobot1` | `<卡>/etc/hostname` |
+| **登录账号** | **`ubuntu`**（uid 1000，家目录 `/home/ubuntu`） | `<卡>/etc/passwd` |
+| **sudo** | **免密**：`ubuntu ALL=(ALL) NOPASSWD:ALL` | `<卡>/etc/sudoers.d/*` |
+| 遗留账号 | `EPRobot`（uid 1001，`/home/EPRobot`） | 从别的车复刻时留下的 |
+| 系统 / ROS | Ubuntu 26.04.1 LTS / ROS 2 **Lyrical**（`/opt/ros/lyrical`） | `<卡>/etc/os-release`、`opt/ros/` |
+| 工作空间 | `/opt/eprobot_ws` | `opt/eprobot_ws/{src,install}` |
+| 相机 | **Astra Pro HD（`2bc5:0501`，有 UVC）** + Astra Pro（`2bc5:0403`） | 用户提供；卡里**没有** `camera_shim` / `relay_ws`，印证不需要 relay |
+| 网络模式 | **AP**：自己发热点 | 见 §3 |
+| 裁判 ID | `25`（`pharmacy.yaml` 的 `car_id`） | `config/pharmacy.yaml` |
+| 状态 | **离线**（无系统卡） | — |
 
-顺带能确认：`.21` 的 `ROS_DOMAIN_ID`（多车同网必须分域，见竞赛笔记 §18.4）。
+> ⚠️ **`.21` 和历史上的 `.24`（ROS 1 车）都叫 `EPRobot1`** —— 认车只能靠 IP + 账号 + ROS 版本。
 
 ---
 
-## 4. 填进来之后的目标结构
+## 2. 和 `.22` 的六处硬差异（**互抄必翻车**）
+
+| 维度 | car21 | car22 | 影响 |
+|---|---|---|---|
+| **相机** | Astra Pro HD，**有 UVC**，直出 mono8 | Astra S，**无 UVC**，必须 `openni2-camera + mono8-relay` | 两套相机链不能互换 |
+| **WiFi** | **AP**（发 `yaofang`） | **STA**（连 `OnePlusAce5`） | 见 §3 |
+| **`board2` 点位** | **`-1.62, 3.76`** | `-0.903, 3.76` | **差 0.72 m**，抄了直接撞墙 |
+| **`board1` 点位** | `0.518, 0` | `0.618, 0` | 差 10 cm，二维码大小会变 |
+| `C` / `A` / `ac_transit` | `1.47` / `0.605` / `1.49,2.88` | `1.46` / `0.610` / `1.46,2.78` | 差 1~10 cm |
+| OCR 路径 | `/home/EPRobot/board2_ocr` | `/home/keyuan22/board2_ocr` | 家目录不同 |
+| `pharmacy_pkg` 体积 | **53 MB**（含大量 `.bak`） | 36 MB | .21 的备份更多 |
+
+> 结论：**航点必须按车各自标**。这也解释了为什么 `docs/竞赛笔记.md` §7.5 要列四套值。
+
+---
+
+## 3. ★ WiFi：AP ↔ STA 的**现成实现**（`.22` 上没有这套）
+
+这是本次归档最有价值的发现。`.21` 用 **hostapd + dnsmasq + 一个 oneshot service** 做热点：
 
 ```
-cars/car21/
-  README.md                 ← 本文件（到时候补上"实测参数"）
-  rootfs/
-    opt/eprobot_ws/install/pharmacy_pkg/...
-    home/ubuntu/<REDACTED>_navigation/...
-    etc/systemd/system/...
-  src/
-    opt_eprobot_ws_src/...
-  MANIFEST.md               ← 从卡里导出的文件清单 + md5
+/etc/hostapd/iscc-ap.conf            ← ssid=yaofang, channel 6, WPA2-PSK, max 8 客户端
+/etc/dnsmasq.d/iscc-ap.conf          ← DHCP 池 10.211.121.150–199, domain=iscc
+/etc/systemd/system/iscc-hotspot.service
+    ExecStartPre: ip link down / addr flush / ip addr replace 10.211.121.21/24 / link up
+    ExecStart:    /usr/sbin/hostapd /etc/hostapd/iscc-ap.conf
+/etc/netplan/50-cloud-init.yaml      ← 只配 eth0 10.0.0.1/24（有线调试口）
+/etc/netplan/99-wlan0-client.yaml.disabled
+                                     ← 客户端模式（10.211.121.21 + OnePlusAce5），带 .disabled = 当前不用
+/usr/local/bin/iscc-wifi-ap.sh       ← 一键切 AP
+/usr/local/bin/iscc-wifi-client.sh   ← 一键切 STA
 ```
+
+**切换逻辑（脚本原文语义）**
+
+| 动作 | `iscc-wifi-ap.sh` | `iscc-wifi-client.sh` |
+|---|---|---|
+| netplan | 把 `99-wlan0-client.yaml` 改名成 `.disabled`，`netplan apply` | 重新生成 `99-wlan0-client.yaml`，`netplan apply` |
+| 服务 | `disable hostapd` → `enable dnsmasq iscc-hotspot` → `restart iscc-hotspot` | `disable --now iscc-hotspot hostapd dnsmasq` → `ip link down` + `addr flush` |
+| 结果 | `wlan0 = 10.211.121.21/24`，发 `yaofang` | `wlan0` 连 `OnePlusAce5`，静态 `.21` |
+
+> ⚠️ **两处不一致，别被注释骗了**：
+> 1. `iscc-wifi-ap.sh` 的注释和 echo 写 "SSID **NDKY**"，但 `iscc-ap.conf` 里实际是 **`ssid=yaofang`** —— **真正的 SSID 是 `yaofang`**。
+> 2. `iscc-hotspot.service` 的 `Description` 也写 "SSID NDKY"，同样是旧文案。
+>
+> ⚠️ **密码已脱敏**：`iscc-ap.conf` 的 `wpa_passphrase=AP_PASSWORD_HERE`、`iscc-wifi-client.sh` 里的 `WIFI_PASSWORD_HERE` 都要填真值。
+
+**安全提醒**：`iscc-wifi-ap.sh` 会**当场断掉你正在用的 WiFi**。要在本机（键盘/HDMI）或先挂一条定时回滚（见 `docs/竞赛笔记.md` §18.3）。
+
+---
+
+## 4. 两条 `.22` 上没有的性能优化（值得抄过去）
+
+| 服务 | 做什么 | 为什么 |
+|---|---|---|
+| `cpu-performance.service` | `echo performance > /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor` | **锁 CPU 性能模式**，减少 ROS 2 控制环抖动（默认 `ondemand` 会降频到 600 MHz） |
+| `wifi-powersave-off.service` | `iw dev wlan0 set power_save off` | 关 WiFi 省电，**降低 DDS 延迟与丢包** |
+
+> 这两条比"关 unattended-upgrades"更直接。`.22` 上没有，建议照搬到 `.22`（属于改系统配置，先备份 unit）。
+
+---
+
+## 5. 目录 → 车上目标路径
+
+`rootfs/` 下相对路径 = 车上绝对路径。
+
+| 本仓库 | 车上 |
+|---|---|
+| `rootfs/opt/eprobot_ws/install/pharmacy_pkg/` | `/opt/eprobot_ws/install/pharmacy_pkg/` |
+| `rootfs/home/ubuntu/{eprobot_navigation,eprobot_cartographer,maps,nav_tune_web}` | `/home/ubuntu/…` |
+| `rootfs/home/ubuntu/lifted_pid_sweep.py` | 架空 PID 扫描工具 |
+| `rootfs/home/ubuntu/iscc_perf_opt_backup_*` | 性能优化**前**的 `nav2_params.yaml` 备份（26 KB）+ 打包 |
+| `rootfs/etc/systemd/system/*.service` | `/etc/systemd/system/` |
+| `rootfs/etc/{hostapd,dnsmasq.d,netplan,default,udev,chrony,wpa_supplicant}/` | 同路径 |
+| `rootfs/usr/local/bin/{iscc-wifi-ap.sh,iscc-wifi-client.sh,lslidar-ctl}` | `/usr/local/bin/` |
+| `src/opt_eprobot_ws_src/*` | `/opt/eprobot_ws/src/`（**要 colcon build**） |
+
+**未归档的两个 unit**：`hostapd.service`、`wpa_supplicant.service` 是指向 `/lib/systemd/system/` 的绝对软链，跨文件系统解引用会指错，故跳过 —— `apt install hostapd` / `wpasupplicant` 会重建。
+
+---
+
+## 6. 一个重要的"坏消息"：卡里**没有 `pharmacy_pkg` 源码**
+
+`opt/eprobot_ws/src/` 里只有 7 个包，和 `.22` 完全一样：
+
+```
+cartographer  cartographer_ros  eprobot_base  lslidar_ros2
+serial_ros2   yesense_interface  yesense_std_ros2
+```
+
+**没有 `pharmacy_pkg`。** 说明：
+
+- 之前希望"从 `.21` 的卡里捞到任务层源码"——**落空了**；
+- 任务层（`f1_mission_node` 等）**依然只有二进制**，两车一样；
+- 想拿源码只能找厂商/队友要 colcon 工程。
+
+顺带确认：`.21` 的 `f1_mission_node` 是 **2,534,200 字节**，与 `.22` 的完全相同（同一份二进制，差异全在 YAML）。
+
+---
+
+## 7. 这台车的服务表
+
+| unit | 作用 |
+|---|---|
+| `eprobot-base` / `eprobot-imu` / `lslidar` / `eprobot-nav` / `eprobot-pharmacy` | 与 `.22` 同名同义 |
+| `eprobot-slam` / `eprobot-carto` | 建图（与 nav 互斥） |
+| `iscc-hotspot` | **AP 热点（`.22` 没有）** |
+| `hostapd` / `dnsmasq` | 热点依赖（`iscc-hotspot` 直接调 hostapd） |
+| `cpu-performance` | **锁性能模式（`.22` 没有）** |
+| `wifi-powersave-off` | **关 WiFi 省电（`.22` 没有）** |
+| `nav-tune-web` | 网页调参 8766 |
+
+---
+
+## 8. 怎么用这份归档
+
+**只取配置看差异**（推荐）：
+```bash
+diff -r cars/car21/rootfs/home/ubuntu/eprobot_navigation/config \
+        cars/car22/rootfs/home/keyuan22/eprobot_navigation/config
+```
+
+**恢复这台车**：把卡插回去、开机，先 `iscc version` 确认 IP/domain，再按 `docs/新车部署手册.md` 的思路（但注意相机链不同：**它不需要 relay**）。
+
+**从卡里再导出**：`export_from_sd.sh`（在本目录，跑在 `.22` 上，只读 + trap 自动 umount）。
+
+---
+
+## 9. 版权
+
+`pharmacy_pkg` 二进制、`eprobot_*` 源码包均为 **EPRobot（北京塔洛斯科技）** 材料，见根目录 [`NOTICE.md`](../../NOTICE.md)。
