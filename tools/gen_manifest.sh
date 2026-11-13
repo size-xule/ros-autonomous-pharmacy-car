@@ -2,17 +2,19 @@
 # tools/gen_manifest.sh —— 重新生成 docs/附录-文件清单.md
 #
 # 用法（仓库根目录）：
-#   bash tools/gen_manifest.sh
+#   bash tools/gen_manifest.sh              # 写到 docs/附录-文件清单.md
+#   bash tools/gen_manifest.sh /tmp/x.md    # 写到指定路径（selfcheck 用它做新旧对比）
 #
 # 说明：
 #   * 以 git ls-files 为准，不扫磁盘（避免把 __pycache__ / .pytest_cache 算进去）
 #   * 只读仓库，不联网
+#   * 排除清单自身，保证重复生成结果一致
 #   * 按区域分组，每区一张『大小 + 路径』列表，便于 grep
 set -euo pipefail
 
 REPO="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
-OUT="docs/附录-文件清单.md"
+OUT="${1:-docs/附录-文件清单.md}"
 
 command -v git >/dev/null || { echo "需要 git"; exit 1; }
 
@@ -36,7 +38,8 @@ AREAS=(
   "（未归类）|."
 )
 
-files=$(git ls-files)
+# 排除清单自身：否则它会列出自己的大小，内容每次生成都变，永远判定为「过期」
+files=$(git ls-files | grep -v '^docs/附录-文件清单\.md$')
 total=$(printf '%s\n' "$files" | grep -c . || true)
 totalb=$(printf '%s\n' "$files" | while IFS= read -r f; do
   [ -f "$f" ] && stat -c %s "$f" 2>/dev/null || echo 0
