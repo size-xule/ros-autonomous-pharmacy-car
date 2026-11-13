@@ -22,7 +22,7 @@
 | 裁判 ID | `25`（`pharmacy.yaml` 的 `car_id`） | `config/pharmacy.yaml` |
 | 状态 | **离线**（无系统卡） | — |
 
-> ⚠️ **`.21` 和历史上的 `.24`（ROS 1 车）都叫 `EPRobot1`** —— 认车只能靠 IP + 账号 + ROS 版本。
+> ⚠️ **主机名不唯一**：别的车或旧镜像也可能叫 `EPRobot1` —— 认车只能靠 IP + 账号 + ROS 版本。
 
 ---
 

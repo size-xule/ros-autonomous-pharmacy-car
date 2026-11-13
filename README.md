@@ -42,9 +42,6 @@ cars/
     rootfs/                 ← 成品：pharmacy_pkg、nav 配置、hostapd+dnsmasq、unit、WiFi 切换脚本
     src/                    ← 需要 colcon build 的 5 个包
     export_from_sd.sh       ← 从 .21 的卡再导出一次（只读 + trap 自动 umount）
-  car24-ros1/               ← ★ ROS 2 升级前的出厂状态索引（Ubuntu 18.04 / ROS 1）
-    README.md               ← 出厂镜像名、厂商 PDF 要点、5 个 gitlink 缺口、取件命令
-    factory/                ← 从 git 抽出的出厂原件：厂商 demo + 厂商驱动 + 590 行原版驱动
 install/
   apply_to_car22.sh         ← 一键铺到新车（默认 dry-run，需 --yes 才写）
 tools/
@@ -95,7 +92,7 @@ iscc start                 # ★ 车会动
 
 ---
 
-## 三台车（别搞混）
+## 两台车（别搞混）
 
 | | **car22（本仓库主目标）** | **car21（初代机）** |
 |---|---|---|
@@ -107,10 +104,8 @@ iscc start                 # ★ 车会动
 | WiFi | 连外部热点 `OnePlusAce5` | 自发热点 `yaofang` |
 | 状态 | 在线 | **已归档**（2026-11-13 只读取件；车本体仍无卡） |
 
-> ⚠️ **主机名会撞**：`.21` 和历史上那台 ROS 1 的 `.24` 都叫 `EPRobot1`。
+> ⚠️ **主机名会撞**：如果哪天遇到一台也叫 `EPRobot1` 的机器，别假设是 `.21`。
 > **认车只用 IP + 账号 + ROS 版本**，不要用 `hostname`。
->
-> 🗄 **第三台（历史）**：`cars/car24-ros1/` 是 ROS 2 升级前那台 ROS 1 车（`.24`，Ubuntu 18.04 / Melodic），已停用，只作归档与对照。
 >
 > 🔎 **`.21` 和 `.22` 的航点差得很大**（`board2` 差 0.72 m、`board1` 差 10 cm），**绝不要互抄**，见 `cars/car21/README.md` §2。
 
