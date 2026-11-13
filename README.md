@@ -110,3 +110,28 @@ iscc start                 # ★ 车会动
 - 仓库内容按"**能恢复**"标准整理，**但恢复后仍需现场标定航点**——坐标是"这辆车+这块场地"的量出来的，换了车必须重标（见竞赛笔记 §7.5）。
 - 二进制为 **aarch64**，不能在 x86 上跑。
 - 本仓库不含任何授权许可，仅限队内使用。
+
+---
+
+## 怎么拿到"项目压缩包"
+
+- **网页**：打开仓库 → 绿色 `Code` 按钮 → **Download ZIP**（含全部二进制与模型，约 40 MB）
+- **命令行**：
+  ```bash
+  git clone https://github.com/size-xule/ros-autonomous-pharmacy-car.git
+  # 或者只要快照、不要 .git：
+  curl -L -o car.zip https://github.com/size-xule/ros-autonomous-pharmacy-car/archive/refs/heads/main.zip
+  ```
+
+## 把压缩包交给 AI 时，这样说话
+
+> 这是一个 ROS 2（Lyrical / 树莓派 4B / Ubuntu 26.04）比赛车的完整运行时快照。
+> `cars/car22/rootfs/` 里的路径就是车上的绝对路径，`cars/car22/src/` 需要 colcon build。
+> 请读 `docs/新车部署手册.md`，帮我把这套东西铺到一台新车上；先做 dry-run 给我看要改哪些文件，
+> 再按 `install/apply_to_car22.sh` 的步骤执行。注意：WiFi 密码和 SSH 密码是占位符，要我提供真值；
+> 航点必须重新标定，不要直接沿用 `mission_waypoints.yaml` 里的坐标。
+
+**三条红线**（写在提示词里，避免 AI 乱来）：
+1. 不要改 `cars/car22/rootfs/opt/.../lib/pharmacy_pkg/` 下的**二进制**（无源码，改了就用不了）。
+2. 不要跳过备份；`install/apply_to_car22.sh` 默认 dry-run，别一上来就 `--yes`。
+3. 不要在 `.22` 这台上直接铺（脚本会拒绝，除非 `--force`）。
