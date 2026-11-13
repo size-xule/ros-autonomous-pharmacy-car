@@ -52,5 +52,5 @@ colcon build --packages-select mono8_relay
 
 ## 4. 依赖
 
-系统级依赖（apt 包名与版本）见 `docs/依赖清单.md`（待建）。当前已知：
+系统级依赖（apt 包名与版本）见 [`docs/依赖清单.md`](../../../docs/依赖清单.md)。当前已知：
 `ros-lyrical-*`、`libboost-thread`、`libudev`、OpenCV（`mono8_relay` 用 `cv_bridge`）。
