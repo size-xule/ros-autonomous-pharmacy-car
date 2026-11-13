@@ -1,0 +1,579 @@
+#!/usr/bin/env bash
+# iscc - Control for the ISCC single-car stack (ROS 2 Lyrical on the car).
+# Run from ISCC_CAR/scripts/iscc or an installed bundle; ~/.local/bin/iscc links here.
+#
+#   iscc pre         Start ROS 2 navigation (chassis + H30 IMU + lidar + Nav2/AMCL), follow logs.
+#   iscc create      Start SLAM Toolbox mapping (chassis + H30 IMU + lidar; stops navigation), follow logs.
+#   iscc save [name] Save the live /map to /home/ubuntu/maps/<name>.yaml|pgm.
+#   iscc start       Run the ROS 2 F1 mission in the foreground; the car will MOVE.
+#   iscc stop        Stop the running F1 mission only; chassis/Nav2/lidar stay up (RViz keeps working).
+#   iscc costmap [--global|--local] Clear Nav2 costmaps (global+local by default).
+#   iscc ros [--dot] Dump the live ROS 2 node/topic graph (--dot for Graphviz).
+#   iscc clear       Sweep leftovers only (stray ros2 CLI, ros2 daemon, stale FastDDS shm);
+#                    leaves the running stack alone. Use when `iscc pre` feels slow.
+#   iscc kill        FORCE KILL every service and ROS process on the car (mission, Nav2, lidar, IMU, chassis, camera).
+#   iscc status      Show chassis/IMU/lidar/nav/slam state, ROS 2 nodes and H30 age.
+#   iscc logs        Follow logs (journalctl on ROS 2 cars, files on ROS 1 cars).
+#   iscc shell       Open an interactive shell on the robot.
+#   iscc rviz2       Open RViz2 on this host (local ROS 2, no container).
+#   iscc gray        Live grayscale view of /camera/rgb/image_raw (q=quit, s=save PNG).
+#   iscc camtune     Sweep camera exposure, keep the sharpest well-exposed frame (samples in /tmp).
+#   iscc rviz        Open RViz on this host (local ROS 1, no container).
+#   iscc rqt         Open rqt on this host (node graph by default).
+#   iscc rqt_graph   Open rqt_graph on this host.
+#   iscc version     Print the installed version, resolved config and endpoints.
+#
+# Overrides: ROBOT_IP ROBOT_USER ROBOT_PASS CAR_ID ROS_DOMAIN_ID ROS2_DISTRO
+#            ROS2_WS_SETUP MAPS_DIR LOCALIZATION MAP_FILE PBSTREAM_FILE JUDGE_*
+#            ROS1_SETUP ROS2_SETUP ROS2_HOST_DISTRO RVIZ_CONFIG
+# Config:    ~/.config/iscc/iscc.conf (or $ISCC_CONFIG); environment wins.
+# GUI: rviz/rviz2/rqt run directly on this host; no containers.
+set -Eeo pipefail
+
+# --- optional user config ----------------------------------------------------
+# Precedence: exported environment (or a VAR=value prefix) > config file >
+# built-in defaults below.  A config line therefore guards its own value:
+#   ROBOT_IP="${ROBOT_IP:-10.211.121.21}"
+# ISCC_CONFIG overrides the path; /dev/null disables the file.
+iscc_root() { dirname "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"; }
+iscc_config_path() {
+  if [ -n "${ISCC_CONFIG:-}" ]; then printf '%s\n' "$ISCC_CONFIG"; return 0; fi
+  if [ -n "${XDG_CONFIG_HOME:-}" ] && [ -r "$XDG_CONFIG_HOME/iscc/iscc.conf" ]; then
+    printf '%s\n' "$XDG_CONFIG_HOME/iscc/iscc.conf"; return 0
+  fi
+  if [ -r "$HOME/.config/iscc/iscc.conf" ]; then
+    printf '%s\n' "$HOME/.config/iscc/iscc.conf"; return 0
+  fi
+  if [ -r "$(iscc_root)/iscc.conf" ]; then printf '%s\n' "$(iscc_root)/iscc.conf"; return 0; fi
+  printf '\n'
+}
+ISCC_CONFIG_FILE="$(iscc_config_path)"
+if [ -n "$ISCC_CONFIG_FILE" ] && [ -r "$ISCC_CONFIG_FILE" ]; then
+  # shellcheck disable=SC1090
+  . "$ISCC_CONFIG_FILE"
+fi
+
+ROBOT_IP="${ROBOT_IP:-10.211.121.22}"
+ROBOT_USER="${ROBOT_USER:-keyuan22}"
+ROBOT_PASS="${ROBOT_PASS:?set ROBOT_PASS (see iscc.conf.example)}"
+CAR_ID="${CAR_ID:-25}"
+case "$CAR_ID" in 24|25) ;; *) echo "CAR_ID must be 24 or 25" >&2; exit 2 ;; esac
+JUDGE_HOST="${JUDGE_HOST:-10.211.121.38}"
+JUDGE_PORT="${JUDGE_PORT:-8888}"
+if [ "$CAR_ID" = 24 ]; then DEFAULT_JUDGE_ID=2; else DEFAULT_JUDGE_ID=1; fi
+JUDGE_ID="${JUDGE_ID:-$DEFAULT_JUDGE_ID}"
+SCRIPTS_DIR="/home/${ROBOT_USER}/robot_ws/src/pharmacy_pkg/scripts"
+LOCALIZATION="${LOCALIZATION:-cartographer}"
+MAP_FILE="${MAP_FILE:-/home/${ROBOT_USER}/robot_ws/src/robot_navigation/maps/iscc_4.yaml}"
+PBSTREAM_FILE="${PBSTREAM_FILE:-/home/${ROBOT_USER}/robot_ws/src/robot_navigation/maps/iscc_4.pbstream}"
+case "$LOCALIZATION" in cartographer) NAV_MAP="$PBSTREAM_FILE" ;; amcl) NAV_MAP="$MAP_FILE" ;; *) echo "LOCALIZATION must be cartographer or amcl" >&2; exit 2 ;; esac
+LOG_DIR="/home/${ROBOT_USER}/robot_ws/.log/nav-camera-detect-car${CAR_ID}"
+RUN_DIR="/home/${ROBOT_USER}/robot_ws/.run/pharmacy-car${CAR_ID}"
+# --- ROS 2 (Lyrical) stack on the car ---------------------------------------
+ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
+ROS2_DISTRO="${ROS2_DISTRO:-lyrical}"
+ROS2_WS_SETUP="${ROS2_WS_SETUP:-/opt/eprobot_ws/install/setup.bash}"
+MAPS_DIR="${MAPS_DIR:-/home/ubuntu/maps}"
+NAV_UNIT="${NAV_UNIT:-eprobot-nav}"
+SLAM_UNIT="${SLAM_UNIT:-eprobot-slam}"
+BASE_UNIT="${BASE_UNIT:-eprobot-base}"
+IMU_UNIT="${IMU_UNIT:-eprobot-imu}"
+LIDAR_UNIT="${LIDAR_UNIT:-lslidar}"
+PHARMACY_UNIT="${PHARMACY_UNIT:-eprobot-pharmacy}"
+ROS1_SETUP="${ROS1_SETUP:-}"
+ROS2_SETUP="${ROS2_SETUP:-}"
+ROS2_HOST_DISTRO="${ROS2_HOST_DISTRO:-}"
+SSH_OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=8 -o LogLevel=ERROR)
+
+usage() { awk 'NR>1 && /^#/ {sub(/^# ?/,""); print; next} NR>1 {exit}' "$(readlink -f "$0")"; }
+quote() { printf '%q' "$1"; }
+
+# wsl.exe is often missing from PATH inside a non-login shell (appendWindowsPath
+# only affects interactive logins), so probe the well-known locations first.
+find_wsl_exe() {
+  local c
+  for c in /mnt/c/Windows/System32/wsl.exe /mnt/c/windows/system32/wsl.exe; do
+    [ -x "$c" ] && { printf '%s\n' "$c"; return 0; }
+  done
+  command -v wsl.exe >/dev/null 2>&1 && { command -v wsl.exe; return 0; }
+  return 1
+}
+
+cmd_version() {
+  local root version=dev
+  root="$(iscc_root)"
+  [ -r "$root/VERSION" ] && version="$(head -n1 "$root/VERSION")"
+  printf 'iscc %s\n' "$version"
+  printf '  script : %s\n' "$(readlink -f "${BASH_SOURCE[0]}")"
+  printf '  root   : %s\n' "$root"
+  printf '  config : %s\n' "${ISCC_CONFIG_FILE:-<none>}"
+  printf '  robot  : %s@%s\n' "$ROBOT_USER" "$ROBOT_IP"
+  printf '  car_id : %s   domain: %s   distro: %s\n' "$CAR_ID" "$ROS_DOMAIN_ID" "$ROS2_DISTRO"
+  printf '  maps   : %s\n' "$MAPS_DIR"
+}
+ros1_setup_for_host() {
+  local candidate
+  for candidate in ${ROS1_SETUP:-} /opt/ros/noetic/setup.bash /opt/ros/melodic/setup.bash /opt/ros/*/setup.bash; do
+    [ -r "$candidate" ] || continue
+    if bash -c "source $(quote "$candidate") >/dev/null 2>&1 && command -v rviz >/dev/null"; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+ros2_setup_for_host() {
+  local candidate
+  for candidate in ${ROS2_SETUP:-} ${ROS2_HOST_DISTRO:+/opt/ros/$ROS2_HOST_DISTRO/setup.bash} "/opt/ros/$ROS2_DISTRO/setup.bash" /opt/ros/*/setup.bash; do
+    [ -r "$candidate" ] || continue
+    if bash -c "source $(quote "$candidate") >/dev/null 2>&1 && command -v ros2 >/dev/null"; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+cmd_gui() {
+  local gui_tool="$1"
+  shift
+  # No local ROS 2 GUI (e.g. this is the ROS 1 Ubuntu-20.04 distro): hand the
+  # window over to WSL Ubuntu-26.04, which has ros-lyrical rviz2 and shares
+  # WSLg with this desktop.
+  case "$gui_tool" in
+    rviz|rviz2)
+  # No local ROS 2 (e.g. the Ubuntu-20.04 ROS 1 distro): hand the window to
+  # WSL Ubuntu-26.04, which ships ros-lyrical rviz2 and shares WSLg.
+  if ! ros2_setup_for_host >/dev/null 2>&1; then
+    if wsl_exe="$(find_wsl_exe)"; then
+      echo "[iscc] no local ROS 2; launching RViz2 in WSL Ubuntu-26.04 (WSLg)"
+      exec "$wsl_exe" -d Ubuntu-26.04 -u root -- bash -lc "export ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-1}; export ROBOT_IP=${ROBOT_IP}; exec /usr/local/bin/iscc rviz2"
+    fi
+  fi
+      ;;
+  esac
+  local -a gui_args=("$@")
+  local root setup rviz_config ros2_config
+  root="$(iscc_root)"
+  # catkin's setup.bash forwards the caller's positional parameters to
+  # _setup_util.py; clear them so GUI flags (e.g. -s, --help) are not eaten.
+  set --
+  if setup="$(ros1_setup_for_host)"; then
+    # shellcheck disable=SC1090
+    source "$setup"
+    export ROS_MASTER_URI="http://$ROBOT_IP:11311"
+    export ROS_IP="${ROS_IP:-$(ip -4 route get "$ROBOT_IP" | awk '{for (field=1; field<=NF; field++) if ($field == "src") {print $(field+1); exit}}')}"
+    unset ROS_HOSTNAME
+  elif setup="$(ros2_setup_for_host)"; then
+    # shellcheck disable=SC1090
+    source "$setup"
+    export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
+  else
+    echo '[iscc] no local ROS found; install ROS 1 (rviz/rqt) or ROS 2 (rviz2/rqt).' >&2
+    return 1
+  fi
+  set -- "${gui_args[@]}"
+  rviz_config="${RVIZ_CONFIG:-$root/config/rviz/navigation.rviz}"
+  ros2_config="${RVIZ_CONFIG:-$root/config/rviz/navigation_ros2.rviz}"
+  case "$gui_tool" in
+    rviz)
+      if command -v rviz >/dev/null 2>&1; then
+        # Keep repeated invocations from multiplying subscriptions to the car.
+        # The lock is per master; simulation and other robots remain independent.
+        exec 9>"/tmp/iscc-rviz-${ROBOT_IP//[^a-zA-Z0-9_.-]/_}.lock"
+        if ! flock -n 9; then
+          echo "[iscc] RViz is already open for $ROBOT_IP; close it before reopening."
+          return 0
+        fi
+        exec rviz -d "$rviz_config" "$@"
+      fi
+      command -v rviz2 >/dev/null 2>&1 || { echo '[iscc] neither rviz nor rviz2 is installed' >&2; return 1; }
+      exec rviz2 -d "$ros2_config" "$@"
+      ;;
+    rqt) exec rqt "$@" ;;
+    rqt_graph) exec rqt_graph "$@" ;;
+  esac
+}
+
+cmd_rviz2() {
+  local root setup rviz_config
+  local -a gui_args=("$@")
+  root="$(iscc_root)"
+  # No local ROS 2 (e.g. the Ubuntu-20.04 ROS 1 distro): hand the window to
+  # WSL Ubuntu-26.04, which ships ros-lyrical rviz2 and shares WSLg.
+  if ! ros2_setup_for_host >/dev/null 2>&1; then
+    if wsl_exe="$(find_wsl_exe)"; then
+      echo "[iscc] no local ROS 2; launching RViz2 in WSL Ubuntu-26.04 (WSLg)"
+      exec "$wsl_exe" -d Ubuntu-26.04 -u root -- bash -lc "export ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-1}; export ROBOT_IP=${ROBOT_IP}; exec /usr/local/bin/iscc rviz2"
+    fi
+  fi
+  set --
+  if setup="$(ros2_setup_for_host)"; then
+    # shellcheck disable=SC1090
+    source "$setup"
+  fi
+  set -- "${gui_args[@]}"
+  if ! command -v rviz2 >/dev/null 2>&1; then
+    if wsl_exe="$(find_wsl_exe)"; then
+      echo "[iscc] no local rviz2; launching RViz2 in WSL Ubuntu-26.04 (WSLg)"
+      exec "$wsl_exe" -d Ubuntu-26.04 -u root -- bash -lc "export ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-1}; export ROBOT_IP=${ROBOT_IP}; exec /usr/local/bin/iscc rviz2"
+    fi
+    echo '[iscc] rviz2 not found on this host. Install ROS 2 with rviz2, or set ROS2_SETUP=/opt/ros/<distro>/setup.bash.' >&2
+    return 1
+  fi
+  [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] || { echo 'DISPLAY is empty; cannot open RViz2' >&2; return 1; }
+  export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
+  rviz_config="${RVIZ_CONFIG:-$root/config/rviz/navigation_ros2.rviz}"
+  exec rviz2 -d "$rviz_config" "$@"
+}
+rsh() {
+  SSHPASS="$ROBOT_PASS" sshpass -e ssh "${SSH_OPTS[@]}" "${ROBOT_USER}@${ROBOT_IP}" "$1"
+}
+remote_env() {
+  printf 'export LANG=C.UTF-8 LC_ALL=C.UTF-8 ROS_MASTER_URI=%q ROS_IP=%q; unset ROS_HOSTNAME; ' "http://${ROBOT_IP}:11311" "$ROBOT_IP"
+  printf 'export PHARMACY_IMPL=%q BOARD2_BACKEND=%q; ' "${PHARMACY_IMPL:-cpp}" "${BOARD2_BACKEND:-fixed}"
+  if [ -n "${OCR_PYTHON:-}" ]; then printf 'export OCR_PYTHON=%q; ' "$OCR_PYTHON"; fi
+  if [ -n "${OCR_WORKER:-}" ]; then printf 'export OCR_WORKER=%q; ' "$OCR_WORKER"; fi
+  printf 'export LOCALIZATION=%q MAP_FILE=%q PBSTREAM_FILE=%q JUDGE_HOST=%q JUDGE_PORT=%q JUDGE_ID=%q; ' \
+    "$LOCALIZATION" "$MAP_FILE" "$PBSTREAM_FILE" "$JUDGE_HOST" "$JUDGE_PORT" "$JUDGE_ID"
+}
+# --- ROS 2 (Lyrical) stack ---------------------------------------------------
+# The car runs eprobot-base / lslidar / eprobot-nav / eprobot-slam as systemd
+# units on ROS_DOMAIN_ID=0; nav and slam Conflict= each other, lidar is manual.
+ros2_env() {
+  printf 'export LANG=C.UTF-8 LC_ALL=C.UTF-8 ROS_DOMAIN_ID=%q; ' "$ROS_DOMAIN_ID"
+  printf 'source /opt/ros/%s/setup.bash; source %s; ' "$ROS2_DISTRO" "$ROS2_WS_SETUP"
+}
+has_ros2() { rsh "test -f /opt/ros/${ROS2_DISTRO}/setup.bash && test -f ${ROS2_WS_SETUP}" 2>/dev/null; }
+h30_diagnostics() {
+  local filter
+  filter="any(s.name == 'eprobot_base: chassis' and any(k.key == 'yaw_source_used' and k.value == 'h30' for k in s.values) and any(k.key == 'h30_fresh' and k.value == 'true' for k in s.values) for s in m.status)"
+  rsh "$(ros2_env)timeout 15 ros2 topic echo /diagnostics --once --timeout 12 --qos-reliability best_effort --filter $(quote "$filter") 2>/dev/null"
+}
+wait_nav_active() {
+  local i out
+  printf '[iscc] waiting for Nav2 lifecycle'
+  # The journal line is authoritative and cheap; `ros2 lifecycle get` needs
+  # >5 s just to start the CLI on this Pi, so it is only a fallback here.
+  for ((i = 0; i < 15; i++)); do
+    if rsh "sudo -n journalctl -u $NAV_UNIT --since '-5 min' --no-pager 2>/dev/null | grep -q 'Managed nodes are active'" >/dev/null 2>&1; then
+      echo ' active'
+      return 0
+    fi
+    out="$(rsh "$(ros2_env)timeout 10 ros2 lifecycle get /bt_navigator 2>/dev/null" 2>/dev/null || true)"
+    case "$out" in
+      active*) echo ' active'; return 0 ;;
+    esac
+    printf '.'; sleep 2
+  done
+  echo
+  echo '[iscc] Nav2 not active; check: iscc logs (journal line "Managed nodes are active")' >&2
+  return 1
+}
+# Cheap liveness probe: /imu/data runs at ~200 Hz, so a single message comes
+# back in ~1-2 s.  The /diagnostics filter used below needs up to 15 s per try,
+# which is what made `iscc pre` feel stuck.
+imu_alive_fast() {
+  local out
+  out="$(rsh "sudo -n timeout 15 /usr/local/bin/iscc-imu-check 2>/dev/null" 2>/dev/null || true)"
+  [ -n "$(printf '%s' "$out" | tr -d '[:space:]')" ]
+}
+
+wait_imu_ready() {
+  local i
+  printf '[iscc] waiting for H30 (/imu/data)'
+  for ((i = 0; i < 6; i++)); do
+    if imu_alive_fast; then
+      local out
+      if out="$(h30_diagnostics 2>/dev/null)" \
+        && printf '%s\n' "$out" | grep -A1 'key: yaw_source_used' | grep -q 'value: h30'; then
+        echo ' ok (h30 drives yaw)'
+      else
+        echo ' ok (/imu/data alive; yaw source not confirmed)'
+      fi
+      return 0
+    fi
+    printf '.'
+    sleep 2
+  done
+  echo
+  echo '[iscc] /imu/data silent for ~14 s; check: iscc status, journalctl -u eprobot-imu' >&2
+  return 1
+}
+wait_unit_active() {
+  local unit="$1" i
+  for ((i = 0; i < 20; i++)); do
+    [ "$(rsh "systemctl is-active $unit" 2>/dev/null || true)" = active ] && return 0
+    sleep 1
+  done
+  echo "[iscc] $unit did not become active" >&2
+  return 1
+}
+follow_journal() {
+  echo "[iscc] Following journal ($*); Ctrl-C only stops watching."
+  rsh "sudo -n journalctl $* -n 20 -f"
+}
+follow_logs() {
+  if has_ros2; then
+    follow_journal "-u $NAV_UNIT -u $SLAM_UNIT -u $LIDAR_UNIT"
+    return
+  fi
+  echo "[iscc] Following provider logs; Ctrl-C only stops watching."
+  rsh "$(remote_env) tail -n 15 -F $(quote "$LOG_DIR/navigation.log") $(quote "$LOG_DIR/camera.log") $(quote "$LOG_DIR/detect.log") $(quote "$LOG_DIR/judge.log")"
+}
+cmd_pre() {
+  if has_ros2; then
+    local i t0 elapsed
+    t0=$(date +%s)
+    printf '[iscc] Car%s: ROS 2 navigation (Nav2 + AMCL + saved map)\n' "$CAR_ID"
+
+    echo "[iscc] 1/5 $BASE_UNIT + $IMU_UNIT + $LIDAR_UNIT (slam off)"
+    rsh "$(ros2_env)sudo -n systemctl start --no-block $BASE_UNIT $IMU_UNIT $LIDAR_UNIT; sudo -n systemctl stop $SLAM_UNIT" || true
+
+    # This Pi has no RTC: a cold boot starts with a clock that can be days off,
+    # and chrony then *steps* the time as soon as NTP is reachable.  If that
+    # step lands while Nav2 is starting, tf2 caches a mixture of old and new
+    # timestamps, AMCL rejects every scan ("timestamp is earlier than all the
+    # data in the transform cache") and costmaps fail to activate.  Wait for
+    # the step to finish before touching Nav2.
+    # Fast DDS keeps one shared-memory port lock per participant; repeated
+    # restarts leave them behind and new processes then fail with
+    # "Failed init_port fastdds_portXXXX: open_and_lock_file failed", which
+    # shows up as nav2 action servers never acknowledging goals.  Above the
+    # threshold, tear the stack down and purge /dev/shm before rebuilding it.
+    # NOTE: `grep -c` exits 1 when the count is zero, and this script runs
+    # under `set -e`, so the assignment must be made non-fatal explicitly.
+    shm_count=$(rsh "ls /dev/shm 2>/dev/null | grep -c '^fastdds_' || true" 2>/dev/null | tr -d '\r' || true)
+    case "$shm_count" in ''|*[!0-9]*) shm_count=0 ;; esac
+    if [ "$shm_count" -gt 90 ]; then
+      printf '[iscc] stale Fast DDS shm (%s segments) -> purging\n' "$shm_count"
+      rsh "sudo -n /usr/local/bin/iscc-kill-all" >/dev/null 2>&1 || true
+      sleep 2
+    fi
+
+    printf '[iscc] 1b/5 waiting for system clock sync'
+    for ((i = 0; i < 30; i++)); do
+      if [ "$(rsh "timedatectl show -p NTPSynchronized --value" 2>/dev/null | tr -d '\r')" = "yes" ]; then
+        echo " ok ($(rsh "date -u +%H:%M:%S" 2>/dev/null | tr -d '\r') UTC)"
+        break
+      fi
+      printf '.'; sleep 2
+    done
+    printf '[iscc] 2/5 waiting for /odom'
+    for ((i = 0; i < 12; i++)); do
+      if rsh "sudo -n timeout 12 /usr/local/bin/iscc-odom-check" >/dev/null 2>&1; then
+        echo ' ok'
+        break
+      fi
+      if [ "$i" -eq 3 ]; then
+        printf ' (DDS stall -> clear)'
+        rsh "sudo -n /usr/local/bin/iscc-clear-all" >/dev/null 2>&1 || true
+      fi
+      printf '.'; sleep 2
+    done
+
+    echo "[iscc] 3/5 camera chain (usb re-enum + start, non-blocking)"
+    rsh "sudo -n /usr/local/bin/iscc-usb-reset 2>/dev/null || true; sudo -n systemctl start --no-block openni2-camera mono8-relay nav-tune-web $PHARMACY_UNIT" || true
+
+    echo "[iscc] 4/5 restarting $NAV_UNIT"
+    rsh "sudo -n systemctl restart --no-block $NAV_UNIT" || true
+
+    wait_imu_ready || true
+    wait_nav_active || true
+
+    printf '[iscc] 5/5 waiting for /camera/rgb/image_raw'
+    for ((i = 0; i < 15; i++)); do
+      if rsh "sudo -n timeout 12 /usr/local/bin/iscc-cam-check" >/dev/null 2>&1; then
+        echo ' ok'
+        break
+      fi
+      printf '.'; sleep 2
+    done
+
+    elapsed=$(( $(date +%s) - t0 ))
+    echo "[iscc] services:"
+    rsh "$(ros2_env)for u in $BASE_UNIT $IMU_UNIT $LIDAR_UNIT $NAV_UNIT $PHARMACY_UNIT openni2-camera mono8-relay nav-tune-web; do printf '  [%s] %s\n' \"\$(systemctl is-active \$u)\" \"\$u\"; done"
+    echo "[iscc] ready in ${elapsed}s"
+    echo '[iscc] RViz: iscc rviz2   (Fixed Frame=map, then 2D Pose Estimate if needed)'
+    follow_journal "-u $NAV_UNIT -u $LIDAR_UNIT"
+    return
+  fi
+  echo "[iscc] Car${CAR_ID}: $LOCALIZATION map=$NAV_MAP"
+  rsh "$(remote_env) bash $(quote "$SCRIPTS_DIR/start_nav_camera_detect.sh") $(quote "$CAR_ID")"
+  follow_logs
+}
+cmd_create() {
+  if ! has_ros2; then echo '[iscc] create needs the ROS 2 stack on the car.' >&2; return 2; fi
+  local name="${1:-}"
+  echo "[iscc] Car${CAR_ID}: SLAM Toolbox mapping (navigation stopped)"
+  rsh "$(ros2_env)sudo -n systemctl start $BASE_UNIT; sudo -n systemctl start $IMU_UNIT; sudo -n systemctl start $LIDAR_UNIT; sudo -n systemctl stop $NAV_UNIT; sudo -n systemctl restart $SLAM_UNIT"
+  wait_imu_ready || true
+  wait_unit_active "$SLAM_UNIT" || true
+  rsh "for u in $BASE_UNIT $IMU_UNIT $LIDAR_UNIT $SLAM_UNIT; do printf '  [%s] %s\n' \"\$(systemctl is-active \$u)\" \"\$u\"; done"
+  echo "[iscc] Drive the car to map it. RViz: iscc rviz2 (Fixed Frame=map)"
+  echo "[iscc] Save when done: iscc save${name:+ $name}"
+  follow_journal "-u $SLAM_UNIT -u $LIDAR_UNIT"
+}
+cmd_save() {
+  if ! has_ros2; then echo '[iscc] save needs the ROS 2 stack on the car.' >&2; return 2; fi
+  local name="${1:-iscc_ros2}"
+  case "$name" in */*|*..*|'') echo '[iscc] name must be a plain file name' >&2; return 2 ;; esac
+  echo "[iscc] Saving /map to $MAPS_DIR/$name.{yaml,pgm}"
+  rsh "$(ros2_env)set -e; rm -f /tmp/$name.yaml /tmp/$name.pgm; timeout 15 ros2 run nav2_map_server map_saver_cli -f /tmp/$name --ros-args -p use_sim_time:=false >/tmp/map_saver.log 2>&1 || { tail -5 /tmp/map_saver.log; exit 1; }; sudo -n mkdir -p $MAPS_DIR; if sudo -n test -f $MAPS_DIR/$name.yaml; then ts=\$(date +%Y%m%d_%H%M%S); sudo -n cp -f $MAPS_DIR/$name.yaml $MAPS_DIR/$name.bak_\$ts.yaml; sudo -n cp -f $MAPS_DIR/$name.pgm $MAPS_DIR/$name.bak_\$ts.pgm; echo \"[iscc] previous map kept as $name.bak_\$ts.*\"; fi; sudo -n cp -f /tmp/$name.yaml /tmp/$name.pgm $MAPS_DIR/; sudo -n ls -l $MAPS_DIR/$name.yaml $MAPS_DIR/$name.pgm"
+  echo "[iscc] Nav2 reads $MAPS_DIR/iscc_ros2.yaml by default -> restart: iscc pre"
+}
+cmd_start() {
+  if has_ros2; then
+    echo "[iscc] Starting the ROS 2 F1 mission; the car will MOVE. Ctrl-C aborts."
+    rsh "$(ros2_env)if pgrep -f '[f]1_mission_node' >/dev/null; then echo '[SKIP] F1 mission is already running.'; exit 0; fi; if [ \"\$(systemctl is-active $NAV_UNIT)\" != active ]; then echo \"[iscc] $NAV_UNIT is not active; run 'iscc pre' first.\" >&2; exit 2; fi; if [ \"\$(systemctl is-active $PHARMACY_UNIT)\" != active ]; then echo '[iscc] starting $PHARMACY_UNIT'; sudo -n systemctl start $PHARMACY_UNIT || exit 1; sleep 2; fi; exec ros2 launch pharmacy_pkg mission.launch.py"
+    return
+  fi
+  echo "[iscc] Starting legacy ROS 1 F1 in the foreground; the car will MOVE. Ctrl-C aborts."
+  rsh "$(remote_env) if pgrep -f '[F]1_yaofang.py|[f]1_mission_node' >/dev/null; then echo '[SKIP] F1 is already running; use iscc status.'; exit 0; fi; bash $(quote "$SCRIPTS_DIR/start_main_program.sh") run"
+}
+cmd_stop() {
+  if has_ros2; then
+    echo "[iscc] Stopping the F1 mission only; chassis + Nav2 + lidar stay UP (RViz still works)"
+    rsh "pkill -INT -f '[f]1_mission_node' 2>/dev/null || true; pkill -INT -f '[m]ission.launch.py' 2>/dev/null || true; sleep 2; pkill -9 -f '[f]1_mission_node' 2>/dev/null || true; pkill -9 -f '[m]ission.launch.py' 2>/dev/null || true; sleep 1; if pgrep -f '[f]1_mission_node' >/dev/null; then echo '  mission: STILL RUNNING'; else echo '  mission: stopped'; fi; for u in $BASE_UNIT $LIDAR_UNIT $NAV_UNIT; do printf '  [%s] %s\n' \"\$(systemctl is-active \$u)\" \"\$u\"; done"
+    return
+  fi
+  rsh "$(remote_env) bash $(quote "$SCRIPTS_DIR/start_main_program.sh") stop && bash $(quote "$SCRIPTS_DIR/stop_pharmacy_stack.sh") $(quote "$CAR_ID") && bash $(quote "$SCRIPTS_DIR/start_camera_detect.sh") stop"
+}
+
+cmd_kill() {
+  echo "[iscc] FORCE KILL: stopping every unit and every ROS 2 process on the car"
+  rsh "sudo -n /usr/local/bin/iscc-kill-all"
+}
+cmd_costmap() {
+  # Clear the Nav2 costmaps on the car.  Useful when a bystander blocked the
+  # lidar, or the robot was pushed/moved and the maps still hold ghost
+  # obstacles.  The car-side helper pins ROS_DOMAIN_ID=1 (the common
+  # ``ROS_DOMAIN_ID=0`` recipe silently does nothing on this vehicle).
+  #   iscc costmap            global + local  (car should be stopped)
+  #   iscc costmap --global   global only     (safe while moving)
+  #   iscc costmap --local    local only      (car must be stopped)
+  rsh "sudo -n timeout 30 /usr/local/bin/iscc-clear-costmap $*"
+}
+
+cmd_ros() {
+  # Default: rqt_graph GUI (WSL Ubuntu-26.04 has ros-lyrical rqt_graph; the
+  # 20.04 distro has no ROS 2).  Text/dot modes read the car directly.
+  local mode="${1:---gui}"
+  case "$mode" in
+    --text|text|-t)
+      shift
+      rsh "sudo -n timeout 60 /usr/local/bin/iscc-ros-graph ${*:---all}"
+      return ;;
+    --dot|dot)
+      rsh "sudo -n timeout 60 /usr/local/bin/iscc-ros-graph --dot"
+      return ;;
+  esac
+
+  if [ -x /opt/ros/lyrical/lib/rqt_graph/rqt_graph ]; then
+    export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-1}"
+    export FASTDDS_BUILTIN_TRANSPORTS=UDPv4
+    exec /opt/ros/lyrical/lib/rqt_graph/rqt_graph
+  fi
+  if wsl_exe="$(find_wsl_exe)"; then
+    echo "[iscc] opening rqt_graph in WSL Ubuntu-26.04 (WSLg)"
+    exec "$wsl_exe" -d Ubuntu-26.04 -u root -- bash -lc       "source /opt/ros/lyrical/setup.bash; export ROS_DOMAIN_ID=1; export FASTDDS_BUILTIN_TRANSPORTS=UDPv4; export QT_QPA_PLATFORM=xcb; exec /opt/ros/lyrical/lib/rqt_graph/rqt_graph"
+  fi
+  echo '[iscc] rqt_graph unavailable; use "iscc ros --text"' >&2
+  return 1
+}
+
+
+cmd_clear() {
+  echo "[iscc] sweeping leftover ROS 2 cruft on the car"
+  rsh "sudo -n /usr/local/bin/iscc-clear-all"
+}
+
+cmd_camtune() {
+  # Sweep the camera exposure and keep the sharpest well-exposed setting.
+  if ! python3 -c 'import cv2, rclpy' >/dev/null 2>&1 || [ ! -r /opt/iscc/scripts/cam_tune.py ]; then
+    if wsl_exe="$(find_wsl_exe)"; then
+      echo "[iscc] running the exposure sweep in WSL Ubuntu-26.04"
+      exec "$wsl_exe" -d Ubuntu-26.04 -u root -- bash -lc "export ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-1}; exec /usr/local/bin/iscc-cam-tune"
+    fi
+    echo '[iscc] no local ROS 2 tooling and wsl.exe unavailable' >&2
+    return 1
+  fi
+  export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-1}"
+  exec python3 /opt/iscc/scripts/cam_tune.py "$@"
+}
+
+cmd_gray() {
+  # Live grayscale view of the competition image topic.
+  # This distro may be the ROS 1 one (no rviz2/cv2 for ROS 2); in that case hand
+  # the window over to WSL Ubuntu-26.04, which has OpenCV + rclpy and shares WSLg.
+  if ! python3 -c 'import cv2, rclpy' >/dev/null 2>&1 || [ ! -r /opt/iscc/scripts/gray_view.py ]; then
+    if wsl_exe="$(find_wsl_exe)"; then
+      echo "[iscc] no local ROS 2 viewer; opening the gray view in WSL Ubuntu-26.04 (WSLg)"
+      exec "$wsl_exe" -d Ubuntu-26.04 -u root -- bash -lc "export ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-1}; export ROBOT_IP=${ROBOT_IP}; exec /usr/local/bin/iscc-gray-view"
+    fi
+    echo '[iscc] no local ROS 2 viewer and wsl.exe unavailable' >&2
+    return 1
+  fi
+  export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-1}"
+  exec python3 /opt/iscc/scripts/gray_view.py "$@"
+}
+
+cmd_status() {
+  if has_ros2; then
+    local diag
+    printf '[iscc] Car%s: ROS 2 (domain %s)\n' "$CAR_ID" "$ROS_DOMAIN_ID"
+    rsh "$(ros2_env)for u in $BASE_UNIT $IMU_UNIT $LIDAR_UNIT $NAV_UNIT $SLAM_UNIT $PHARMACY_UNIT orbbec-camera image-relay nav-tune-web; do printf '  [%s] %s\n' \"\$(systemctl is-active \$u)\" \"\$u\"; done; echo '  --- nodes ---'; timeout 8 ros2 node list 2>/dev/null | sort | sed 's/^/  /' || true; echo '  --- image ---'; timeout 8 ros2 topic info /camera/rgb/image_raw 2>/dev/null | grep -E 'Publisher count|Subscription count' | sed 's/^/  /' || true"
+    diag="$(h30_diagnostics 2>/dev/null || true)"
+    echo '  --- imu ---'
+    printf '%s\n' "$diag" | grep -A1 -E 'key: (yaw_source_used|h30_fresh)' || true
+    return
+  fi
+  rsh "$(remote_env) printf '[iscc] Configured next-start localization: %s map: %s\n' $(quote "$LOCALIZATION") $(quote "$NAV_MAP"); if pgrep -af '[F]1_yaofang.py|[f]1_mission_node'; then :; else echo '[DOWN] F1'; fi; for name in navigation camera detect judge; do pidfile=$(quote "$RUN_DIR")/\$name.pid; if [ -s \"\$pidfile\" ] && kill -0 \"\$(cat \"\$pidfile\")\" 2>/dev/null; then echo \"[UP] \$name (PID \$(cat \"\$pidfile\"))\"; else echo \"[DOWN] \$name\"; fi; done; echo '[iscc] Running localization/map processes:'; pgrep -ax map_server || true; pgrep -ax amcl || true; pgrep -af '[c]artographer_node|[c]artographer_occupancy_grid_node' || true"
+}
+
+case "${1:-help}" in
+  version|-V|--version) cmd_version; exit ;;
+  rviz2|rviz-ros2) shift; cmd_rviz2 "$@"; exit ;;
+  rviz)
+    if command -v sshpass >/dev/null 2>&1 \
+      && rsh 'test -f /opt/ros/lyrical/setup.bash && [ ! -f /opt/ros/melodic/setup.bash ]' 2>/dev/null; then
+      shift
+      cmd_rviz2 "$@"
+      exit
+    fi
+    shift
+    cmd_gui rviz "$@"
+    exit
+    ;;
+  rqt)
+    shift
+    if [ "$#" -eq 0 ]; then
+      cmd_gui rqt -s rqt_graph
+    else
+      cmd_gui rqt "$@"
+    fi
+    exit
+    ;;
+  qrt_graph|rqt_graph) shift; cmd_gui rqt_graph "$@"; exit ;;
+  -h|--help|help) usage; exit ;;
+esac
+command -v sshpass >/dev/null || { echo "sshpass not found; install sshpass." >&2; exit 1; }
+case "${1:-help}" in
+  pre) cmd_pre ;;
+  create|map|slam) shift; cmd_create "${1:-}" ;;
+  save|mapsave) shift; cmd_save "${1:-}" ;;
+  start|go|run) cmd_start ;;
+  stop|halt) cmd_stop ;;
+  kill|force-kill|k9) cmd_kill ;;
+  clear|sweep) cmd_clear ;;
+  ros|graph|rgraph) shift; cmd_ros "$@" ;;
+  costmap|clear-costmap) shift; cmd_costmap "$@" ;;
+  status|st) cmd_status ;;
+  gray|grey|gray-view|grayview) shift; cmd_gray "$@" ;;
+  camtune|cam-tune|exposure) shift; cmd_camtune "$@" ;;
+  logs|log|tail) follow_logs ;;
+  shell|ssh) SSHPASS="$ROBOT_PASS" ssh "${SSH_OPTS[@]}" "${ROBOT_USER}@${ROBOT_IP}" ;;
+  -h|--help|help) usage ;;
+  *) echo "Unknown command: $1" >&2; usage; exit 2 ;;
+esac

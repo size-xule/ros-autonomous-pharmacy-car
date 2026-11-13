@@ -1,0 +1,24 @@
+# iscc 配置模板 —— 复制到 ~/.config/iscc/iscc.conf 后填真值
+# 优先级：环境变量 > 本文件 > 脚本内默认值
+# 本文件本身可以入库；填了真密码的那份不要入库（.gitignore 已挡 iscc.conf）
+
+# 目标车（ROS 2 车 = 10.211.121.22；初代机 = 10.211.121.21）
+ROBOT_IP="${ROBOT_IP:-10.211.121.22}"
+ROBOT_USER="${ROBOT_USER:-keyuan22}"
+
+# 密码：改成真值。不要提交带密码的版本。
+ROBOT_PASS="${ROBOT_PASS:-PUT_PASSWORD_HERE}"
+
+# 车型/裁判档位：24 => EPRobotV2.2 + JUDGE_ID=2；25 => EPRobotV2.3 + JUDGE_ID=1
+# 注意：这不是"第几号车"，只是档位（见 docs/竞赛笔记.md §2.1）
+CAR_ID="${CAR_ID:-25}"
+
+# 地图目录
+MAPS_DIR="${MAPS_DIR:-/home/ubuntu/maps}"
+
+# 必须和车上所有 systemd unit 一致，否则 iscc 起的进程看不见车上节点
+ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-1}"
+
+# 可选：ROS 2 发行版与工作空间
+# ROS2_DISTRO="${ROS2_DISTRO:-lyrical}"
+# ROS2_WS_SETUP="${ROS2_WS_SETUP:-/opt/eprobot_ws/install/setup.bash}"

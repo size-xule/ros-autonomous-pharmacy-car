@@ -1,0 +1,25 @@
+# 让 git 在 Linux 上还原成可执行脚本（不要 CRLF）
+* text=auto eol=lf
+
+# 二进制：禁止任何文本转换
+*.pgm   -text
+*.png   -text
+*.jpg   -text
+*.wav   -text
+*.onnx  -text
+*.so     -text
+*.so.*   -text
+*.a      -text
+*.zip   -text
+*.tar.gz -text
+
+# 编译产物/ELF 可执行文件（无扩展名，靠 auto 识别为二进制）
+f1_mission_node            -text
+judge_tcp_node             -text
+pharmacy_qr_node           -text
+pharmacy_board2_node       -text
+pharmacy_board2_fast_node  -text
+pharmacy_speech_node       -text
+board_benchmark            -text
+pharmacy_detection_backtest -text
+pharmacy_mission_backtest  -text

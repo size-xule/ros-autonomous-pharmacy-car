@@ -1,0 +1,23 @@
+# 本地/临时
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+
+# 密钥与凭据：永远不要入库
+*.key
+*.pem
+id_rsa*
+chrony.keys
+iscc.conf
+!iscc.conf.example
+
+# 车上运行期产生的
+bags/
+*.bag
+*.db3
+*.mcap
+evidence/
+*.jsonl
+__pycache__/
+*.pyc
